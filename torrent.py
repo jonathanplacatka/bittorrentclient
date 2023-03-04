@@ -20,6 +20,17 @@ class Torrent:
         info_bencoded = bencodepy.encode(self.data['info'])
         self.info_hash = hashlib.sha1(info_bencoded).digest()
 
+        if('files' in self.data['info']):
+            self.length = self.get_total_length()
+        else:
+            self.length = self.data['length']
+
+    def get_total_length(self):
+        total = 0
+        for file in self.data['info']['files']:
+            total += file['length']
+        return total
+
     #recursively decode dictionaries and lists of byte strings to utf-8
     def decode_value(self, value):
             new_value = value
