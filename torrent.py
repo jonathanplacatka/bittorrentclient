@@ -15,7 +15,11 @@ class Torrent:
 
         data_decoded = bencodepy.decode(data_bencoded)
         self.data = self.decode_value(data_decoded)
-        
+
+        #get SHA1 hash of bencoded info dictionary
+        info_bencoded = bencodepy.encode(self.data['info'])
+        self.info_hash = hashlib.sha1(info_bencoded).digest()
+
     #recursively decode dictionaries and lists of byte strings to utf-8
     def decode_value(self, value):
             new_value = value
