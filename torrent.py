@@ -1,5 +1,6 @@
 import bencodepy
 import hashlib
+import bdecode
 
 #class representing a torrent file
 class Torrent:
@@ -13,8 +14,7 @@ class Torrent:
         with open(filename, 'rb') as fp:
             data_bencoded = fp.read()
 
-        data_decoded = bencodepy.decode(data_bencoded)
-        self.data = self.decode_value(data_decoded)
+        self.data = bdecode.decode(data_bencoded)
 
         #get SHA1 hash of bencoded info dictionary
         info_bencoded = bencodepy.encode(self.data['info'])
@@ -30,28 +30,3 @@ class Torrent:
         for file in self.data['info']['files']:
             total += file['length']
         return total
-
-    #recursively decode dictionaries and lists of byte strings to utf-8
-    def decode_value(self, value):
-            new_value = value
-
-            if isinstance(value, bytes):
-                new_value = value.decode()
-
-            if isinstance(value, list):
-                new_value = []
-                for item in value:
-                    new_value.append(self.decode_value(item))
-
-            if isinstance(value, dict):
-                new_value = {}
-                for key,val in value.items(): 
-                    if key == b'pieces': #pieces should stay as bytes
-                        new_value[self.decode_value(key)] = val
-                    else:
-                        new_value[self.decode_value(key)] = self.decode_value(val)
-
-            return new_value
-
-
-
