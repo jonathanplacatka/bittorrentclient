@@ -15,7 +15,7 @@ class Torrent:
             data_bencoded = fp.read()
 
         self.data = bdecode.decode(data_bencoded)
-
+        
         #get SHA1 hash of bencoded info dictionary
         info_bencoded = bencodepy.encode(self.data['info'])
         self.info_hash = hashlib.sha1(info_bencoded).digest()
@@ -23,8 +23,8 @@ class Torrent:
         if('files' in self.data['info']):
             self.length = self.get_total_length()
         else:
-            self.length = self.data['length']
-
+            self.length = self.data['info']['length']
+        
     def get_total_length(self):
         total = 0
         for file in self.data['info']['files']:
