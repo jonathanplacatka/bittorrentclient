@@ -1,9 +1,12 @@
 import torrent
 import random
-import requests
+
 import bdecode
 import socket
 import select
+
+import requests
+from requests import adapters
 
 LISTEN_PORT = 7000
 
@@ -15,7 +18,7 @@ def generate_peer_id():
     return id
 
 def tracker_request():
-    params = {
+    request_params = {
         'info_hash': torrent_file.info_hash,
         'peer_id': peer_id,
         'port': LISTEN_PORT,
@@ -27,12 +30,17 @@ def tracker_request():
     }
 
     url = torrent_file.data['announce']
-        
-    response = requests.get(url, params)
+
+    session = requests.Session()
+    session.params = request_params
+    #trackers sometimes respond with ConnectionResetError on valid requests, just retry
+    retries = adapters.Retry(total=3, backoff_factor=1) 
+    session.mount('http://', adapters.HTTPAdapter(max_retries=retries))
+    response = session.get(url)
 
     return bdecode.decode(response.content)
 
-#TODO: check for compact vs non-compact peer list
+#TODO: check for compact vs non-compact peer list (compact almost always used in practice)
 def decode_compact_peer_list(peer_bytes):
     peer_list = []
     for x in range(0, len(peer_bytes), 6):
@@ -61,42 +69,37 @@ def send_handshake(peer_socket):
     peer_socket.sendall(msg)
     data = peer_socket.recv(1024)
 
-    print("received:", data)
+    #print("received:", data)
+    print("received handshake")
 
 def run():
     while True:
         try:
-            readable, writable, exceptions = select.select(
-                [],
-                peer_sockets,
-                []
-            )
+            readable, writable, exceptions = select.select([], peer_sockets, [])
 
             for sock in writable:
                 if sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR) == 0:
                     send_handshake(sock)
                     peer_sockets.remove(sock)
                     connected.append(sock)
-                    print("CONNECTIONS:", len(connected))
+                    print("{} connected: {}".format(len(connected), sock))
                 else:
                     peer_sockets.remove(sock)
         except Exception as e:
             print('exception', e)
 
-
 peer_sockets = []
 connected = []
 
-torrent_file = torrent.Torrent('o.torrent')
+torrent_file = torrent.Torrent('bl.torrent')
 peer_id = generate_peer_id()
 tracker_response = tracker_request()
-
 print(tracker_response)
 
 peer_list = decode_compact_peer_list(tracker_response['peers'])
 print(peer_list)
-
 connect_peers()
+
 run()
 
 
