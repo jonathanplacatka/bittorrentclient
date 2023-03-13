@@ -46,15 +46,14 @@ def decode_compact_peer_list(peer_bytes):
     for x in range(0, len(peer_bytes), 6):
         ip = '.'.join(str(x) for x in peer_bytes[x:x+4]) #first 4 bytes are ip
         port = int.from_bytes(peer_bytes[x+4:x+6], byteorder='big') #last 2 bytes together are port
-        peer_list.append((ip, port)) 
-
+        peer_list.append(Peer(ip, port)) 
     return peer_list
 
 def connect_peers():
     for peer in peer_list:   
         p_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         p_socket.setblocking(False)
-        errcode = p_socket.connect_ex(peer)
+        errcode = p_socket.connect_ex(peer.address)
         
         if errcode == 115: #connection in progress     
             connecting.append(p_socket)
@@ -71,8 +70,15 @@ def send_handshake(peer_socket):
 
 def recieve_message(peer_socket):
     data = peer_socket.recv(1024)
+
     if data:
+        #get peer object from list
+        peer_ip = peer_socket.getpeername()
+        peer = peer_list[peer_list.index(peer_ip)] 
+
         print("message receieved")
+    else:
+        connected.remove(peer_socket)
 
 def run():
     while True:
@@ -80,7 +86,7 @@ def run():
             readable, writable, exceptions = select.select(connected, connecting, [])
 
             for sock in readable:
-                recieve_message(sock)
+                    recieve_message(sock)
 
             for sock in writable:
                 if sock in connecting:
@@ -95,7 +101,15 @@ def run():
 
         except Exception as e:
             print('exception', e)
-            
+
+class Peer:
+    def __init__(self, ip, port):
+        self.address = (ip, port)
+    def __eq__(self, obj):
+        return self.address == obj
+
+peer_list = []
+
 connecting = []
 connected = []
 
@@ -105,9 +119,12 @@ tracker_response = tracker_request()
 print(tracker_response)
 
 peer_list = decode_compact_peer_list(tracker_response['peers'])
-print(peer_list)
-connect_peers()
 
+for p in peer_list:
+    print(p.address, end=', ')
+print()
+
+connect_peers()
 run()
 
 
