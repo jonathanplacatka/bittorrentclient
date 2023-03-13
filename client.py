@@ -8,6 +8,8 @@ import select
 import requests
 from requests import adapters
 
+import bitstring
+
 LISTEN_PORT = 7000
 
 #20 bytes: 2 for client id, 4 for version number, remaining are random integers
@@ -65,47 +67,68 @@ def send_handshake(peer_socket):
     msg = HANDSHAKE + torrent_file.info_hash + peer_id.encode()
     peer_socket.sendall(msg)
 
+
 def recieve_message(data, peer_socket):
     #get peer object from list
     peer_ip = peer_socket.getpeername()
     peer = peer_list[peer_list.index(peer_ip)] 
+
     peer.buffer += data
 
     if peer.handshake == False:
         recieve_handshake(peer)
-    else:
-        message_id = peer.buffer[4]
-        if message_id == 5:
-            recieve_bitfield(peer)
-        else:
-            print("RECEIVED MESSAGE ID: ", message_id)
+    elif len(peer.buffer) >= 5:
+        msg_len = int.from_bytes(peer.buffer[0:4], byteorder='big')
+        msg_id = peer.buffer[4]
+
+        print("MSG: ", msg_len, msg_id)
+
+        if len(peer.buffer) >= 4+msg_len:
+            if msg_id == 0:
+                pass
+            elif msg_id == 1:
+                recieve_unchoke(peer)
+            elif msg_id == 5:
+                recieve_bitfield(peer, msg_len)
+
+            peer.buffer = peer.buffer[4+msg_len:]
+            print("BUFFER", peer.buffer)
 
 def recieve_handshake(peer):
     if len(peer.buffer) >= 68:
         if peer.buffer[0:20] == b'\x13BitTorrent protocol' and peer.buffer[28:48] == torrent_file.info_hash:
-            print(peer.buffer[0:68])
             print("RECEIVED: HANDSHAKE")
+            print(peer.buffer[0:68])
             peer.handshake = True
             peer.buffer = peer.buffer[68:]
         else:
             print("invalid peer handshake, dropping connection")
 
-def recieve_bitfield(peer):
-    bitfield_length = int.from_bytes(peer.buffer[0:4], byteorder='big')
-    print("BITFIELD LENGTH: ", bitfield_length)
-    if len(peer.buffer) > bitfield_length:
-        bitfield = peer.buffer[5:bitfield_length]
-
-        print(bitfield)
-        print("RECIEVED: BITFIELD")
-
-        print(len(bitfield)*8)
-        peer.buffer = peer.buffer[bitfield_length:]
+#check if indices are correct for bitfield
+def recieve_bitfield(peer, msg_len):
         
+        print("BITFIELD LENGTH: ", msg_len-1)
+        print("BUFFER", peer.buffer)
+
+        bytes = peer.buffer[5:5+msg_len]
+
+        print(len(bytes))
+
+        peer.bitfield = bitstring.BitArray(bytes)
+
+        print("RECIEVED: BITFIELD")
+        print(len(peer.bitfield))
+        print(peer.bitfield.bin)
+
+def recieve_unchoke(peer):
+    peer.peer_choking = False
+    print("RECIEVED: UNCHOKE")
+    print(peer.buffer)
+
 def run():
     while True:
         try:
-            readable, writable, exceptions = select.select(connected, connecting, [])
+            readable, writable, exceptions = select.select(connected, connecting + connected, [])
 
             for sock in readable:
                 data = sock.recv(8192)
@@ -127,19 +150,25 @@ def run():
                     else:
                         connecting.remove(sock)
 
+                    
+
         except Exception as e:
             print('exception', e)
-
 
 class Peer:
     def __init__(self, ip, port):
         self.address = (ip, port)
         self.handshake = False
         self.buffer = b''
+        self.bitfield = bitstring.BitArray()
+
+        self.am_choking = True
+        self.am_interested = False
+        self.peer_choking = True
+        self.peer_choking = False
 
     def __eq__(self, obj):
         return self.address == obj
-
 
 peer_list = []
 
@@ -160,6 +189,9 @@ print()
 
 connect_peers()
 run()
+
+
+
 
 
 
