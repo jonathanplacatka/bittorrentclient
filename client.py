@@ -65,31 +65,37 @@ def send_handshake(peer_socket):
     HANDSHAKE = b'\x13BitTorrent protocol\x00\x00\x00\x00\x00\x00\x00\x00'
     msg = HANDSHAKE + torrent_file.info_hash + peer_id.encode()
     peer_socket.sendall(msg)
-
-    data = peer_socket.recv(1024)
+    #data = peer_socket.recv(1024)
     #print("received:", data)
-    print("received handshake")
+    #print("received handshake")
+
+def recieve_message(peer_socket):
+    data = peer_socket.recv(1024)
+    if data:
+        print("message receieved")
 
 def run():
     while True:
         try:
-            readable, writable, exceptions = select.select([], connecting, [])
+            readable, writable, exceptions = select.select(connected, connecting, [])
+
+            for sock in readable:
+                recieve_message(sock)
 
             for sock in writable:
                 if sock in connecting:
                     if sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR) == 0:
-                    
                         sock.setblocking(True)
                         connecting.remove(sock)
                         connected.append(sock)
                         send_handshake(sock)
-
                         print("{} connected: {}".format(len(connected), sock))
                     else:
                         connecting.remove(sock)
+
         except Exception as e:
             print('exception', e)
-
+            
 connecting = []
 connected = []
 
