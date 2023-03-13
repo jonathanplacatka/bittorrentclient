@@ -1,12 +1,14 @@
 import bencodepy
 import hashlib
 import bdecode
+import math
 
 #class representing a torrent file
 class Torrent:
     def __init__(self, filename):
         self.data = {}
         self.length = 0
+        self.num_pieces = 0
         self.info_hash = None
         self.read_torrent(filename)
     
@@ -24,6 +26,9 @@ class Torrent:
             self.length = self.get_total_length()
         else:
             self.length = self.data['info']['length']
+
+        self.num_pieces = math.ceil(self.length / self.data['info']['piece length'])
+
         
     def get_total_length(self):
         total = 0
