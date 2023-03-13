@@ -9,7 +9,9 @@ class Torrent:
         self.data = {}
         self.length = 0
         self.num_pieces = 0
+        self.is_multi = False
         self.info_hash = None
+
         self.read_torrent(filename)
     
     def read_torrent(self, filename):
@@ -23,14 +25,14 @@ class Torrent:
         self.info_hash = hashlib.sha1(info_bencoded).digest()
 
         if('files' in self.data['info']):
-            self.length = self.get_total_length()
+            self.is_multi = True
+            self.length = self.get_multifile_length()
         else:
             self.length = self.data['info']['length']
 
         self.num_pieces = math.ceil(self.length / self.data['info']['piece length'])
 
-        
-    def get_total_length(self):
+    def get_multifile_length(self):
         total = 0
         for file in self.data['info']['files']:
             total += file['length']

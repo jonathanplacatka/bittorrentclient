@@ -9,9 +9,11 @@ import requests
 from requests import adapters
 
 import bitstring
+import math
 
 
 LISTEN_PORT = 7000
+BLOCK_SIZE = 16384
 
 #20 bytes: 2 for client id, 4 for version number, remaining are random integers
 def generate_peer_id():
@@ -127,7 +129,7 @@ def send_message(peer_socket):
     peer = peer_list[peer_list.index(peer_ip)] 
 
     if peer.am_interested and not peer.peer_choking and not peer.request:
-        send_request(peer_socket, 0, 0, 16384)
+        send_request(peer_socket, 3, 4, BLOCK_SIZE)
         peer.request = True
         
     elif not peer.am_interested: #check here if a peer has piece we are interested in
@@ -141,13 +143,20 @@ def send_handshake(peer_socket):
     msg = HANDSHAKE + torrent_file.info_hash + peer_id.encode()
     peer_socket.sendall(msg)
 
-def send_request(peer_socket, index, begin, length):
+def send_request(peer_socket, index, block_index, length):
     print("SENT REQUEST")
+
+    begin = block_index*BLOCK_SIZE
+
+    blocks_requested[index][block_index] = True
+    print(blocks_requested[index].bin)
+
     msg = b'\x00\x00\x00\x0d\x06'
     msg += index.to_bytes(4, byteorder='big') 
     msg += begin.to_bytes(4, byteorder='big') 
     msg += length.to_bytes(4, byteorder='big')
-    peer_socket.sendall(msg)
+    
+    #peer_socket.sendall(msg)
 
 def run():
     while True:
@@ -207,11 +216,22 @@ peer_id = generate_peer_id()
 tracker_response = tracker_request()
 print(tracker_response)
 
+print("MULTIFILE: ", torrent_file.is_multi)
 print("NUM PIECES: " + str(torrent_file.num_pieces))
+print("PIECE SIZE: " + str(torrent_file.data['info']['piece length']))
+print("BLOCK SIZE:",  str(BLOCK_SIZE))
+
+
+blocks_per_piece = math.ceil(torrent_file.data['info']['piece length'] / BLOCK_SIZE)
+
+print("BLOCKS PER PIECE:", str(blocks_per_piece))
+
+blocks_requested = []
+for k in range(0, torrent_file.num_pieces):
+    blocks_requested.append(bitstring.BitArray(blocks_per_piece))
 
 
 peer_list = decode_compact_peer_list(tracker_response['peers'])
-
 
 for p in peer_list:
     print(p.address, end=', ')
