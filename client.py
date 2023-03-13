@@ -10,6 +10,7 @@ from requests import adapters
 
 import bitstring
 
+
 LISTEN_PORT = 7000
 
 #20 bytes: 2 for client id, 4 for version number, remaining are random integers
@@ -62,11 +63,6 @@ def connect_peers():
         elif errcode == 0: #connected
             connected.append(p_socket)
 
-def send_handshake(peer_socket):
-    HANDSHAKE = b'\x13BitTorrent protocol\x00\x00\x00\x00\x00\x00\x00\x00'
-    msg = HANDSHAKE + torrent_file.info_hash + peer_id.encode()
-    peer_socket.sendall(msg)
-
 
 def recieve_message(data, peer_socket):
     #get peer object from list
@@ -118,12 +114,40 @@ def recieve_bitfield(peer, msg_len):
 
         print("RECIEVED: BITFIELD")
         print(len(peer.bitfield))
-        print(peer.bitfield.bin)
+        print("ACTUAL ", peer.bitfield.bin.count('1'))
 
 def recieve_unchoke(peer):
     peer.peer_choking = False
     print("RECIEVED: UNCHOKE")
     print(peer.buffer)
+
+def send_message(peer_socket):
+    #get peer object from list
+    peer_ip = peer_socket.getpeername()
+    peer = peer_list[peer_list.index(peer_ip)] 
+
+    if peer.am_interested and not peer.peer_choking and not peer.request:
+        send_request(peer_socket, 0, 0, 16384)
+        peer.request = True
+        
+    elif not peer.am_interested: #check here if a peer has piece we are interested in
+        print("SENDING INTERESTED")
+        peer_socket.sendall(b'\x00\x00\x00\x01\x02')
+        peer.am_interested = True
+
+def send_handshake(peer_socket):
+    print("SENT HANDSHAKE")
+    HANDSHAKE = b'\x13BitTorrent protocol\x00\x00\x00\x00\x00\x00\x00\x00'
+    msg = HANDSHAKE + torrent_file.info_hash + peer_id.encode()
+    peer_socket.sendall(msg)
+
+def send_request(peer_socket, index, begin, length):
+    print("SENT REQUEST")
+    msg = b'\x00\x00\x00\x0d\x06'
+    msg += index.to_bytes(4, byteorder='big') 
+    msg += begin.to_bytes(4, byteorder='big') 
+    msg += length.to_bytes(4, byteorder='big')
+    peer_socket.sendall(msg)
 
 def run():
     while True:
@@ -145,13 +169,12 @@ def run():
                         connected.append(sock)
                         send_handshake(sock)
                         print("{} connected: {}".format(len(connected), sock))
-
-                        #connecting.clear() #TESTING, REMOVE ME
+                        connecting.clear() #TESTING, REMOVE ME
                     else:
                         connecting.remove(sock)
-
+                if sock in connected:
+                    send_message(sock)
                     
-
         except Exception as e:
             print('exception', e)
 
@@ -160,15 +183,18 @@ class Peer:
         self.address = (ip, port)
         self.handshake = False
         self.buffer = b''
-        self.bitfield = bitstring.BitArray()
+        self.bitfield = bitstring.BitArray(torrent_file.num_pieces)
 
         self.am_choking = True
         self.am_interested = False
         self.peer_choking = True
-        self.peer_choking = False
+        self.peer_interested = False
+
+        self.request = False
 
     def __eq__(self, obj):
         return self.address == obj
+
 
 peer_list = []
 
@@ -181,7 +207,11 @@ peer_id = generate_peer_id()
 tracker_response = tracker_request()
 print(tracker_response)
 
+print("NUM PIECES: " + str(torrent_file.num_pieces))
+
+
 peer_list = decode_compact_peer_list(tracker_response['peers'])
+
 
 for p in peer_list:
     print(p.address, end=', ')
@@ -189,6 +219,9 @@ print()
 
 connect_peers()
 run()
+
+
+
 
 
 
