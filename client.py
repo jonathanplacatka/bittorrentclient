@@ -103,7 +103,7 @@ def receive_piece(peer, msg_len):
     begin = int.from_bytes(peer.buffer[9:13], byteorder='big')
     block = peer.buffer[13:13+msg_len]
 
-    print("RECIEVED - PIECE:{} BLOCK:{}".format(index, int(begin/BLOCK_SIZE)))
+    #print("RECIEVED - PIECE:{} BLOCK:{}".format(index, int(begin/BLOCK_SIZE)))
 
     byte_offset =  index*torrent_file.data['info']['piece length'] + begin
     fp_out.seek(byte_offset, 0)
@@ -141,7 +141,7 @@ def receive_handshake(peer):
     if len(peer.buffer) >= 68:
         if peer.buffer[0:20] == b'\x13BitTorrent protocol' and peer.buffer[28:48] == torrent_file.info_hash:
             print("RECEIVED: HANDSHAKE")
-            print(peer.buffer[0:68])
+            #print(peer.buffer[0:68])
             peer.handshake = True
             peer.buffer = peer.buffer[68:]
         else:
@@ -166,7 +166,7 @@ def send_message(peer_socket):
         send_request(peer, peer_socket)
         peer.request = True
         
-    elif not peer.am_interested: #check here if a peer has piece we are interested in
+    elif not peer.am_interested: #TODO: check if peer has piece we are interested in
         print("SENDING INTERESTED")
         peer_socket.sendall(b'\x00\x00\x00\x01\x02')
         peer.am_interested = True
@@ -206,7 +206,7 @@ def send_request(peer, peer_socket):
     
 def select_block(peer):
 
-    for piece_index in range(torrent_file.num_pieces-1,torrent_file.num_pieces):#range(torrent_file.num_pieces): 
+    for piece_index in range(torrent_file.num_pieces): 
 
         find_block = blocks_requested[piece_index].find('0b0')
     
