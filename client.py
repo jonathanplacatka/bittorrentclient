@@ -124,8 +124,14 @@ def validate_piece(piece_index):
 
         if hashlib.sha1(piece).digest() == piece_hash:
             print("PIECE {} VALID".format(piece_index))
-        else:
+        else: #invalid piece, re-request all blocks
             print("INVALID PIECE")
+            num_blocks = blocks_per_piece 
+            if piece_index == torrent_file.num_pieces-1:
+                num_blocks = blocks_per_final_piece
+
+            blocks_requested[piece_index] = bitstring.BitArray(num_blocks)
+            blocks_received[piece_index] = bitstring.BitArray(num_blocks)
 
 #TODO: handle have messages    
 def receive_have(peer):
@@ -171,8 +177,6 @@ def send_handshake(peer_socket):
     msg = HANDSHAKE + torrent_file.info_hash + peer_id.encode()
     peer_socket.sendall(msg)
 
-
-#TODO handle case of last piece being different size
 def send_request(peer, peer_socket):
     request_params = select_block(peer)
 
@@ -186,7 +190,6 @@ def send_request(peer, peer_socket):
         #final block may have different size
         if piece_index == torrent_file.num_pieces-1 and block_index == blocks_per_final_piece-1:
             length = final_piece_size - (blocks_per_final_piece-1)*BLOCK_SIZE
-            print("LOL!", length)
 
         peer.request = True 
 
@@ -203,7 +206,7 @@ def send_request(peer, peer_socket):
     
 def select_block(peer):
 
-    for piece_index in range(torrent_file.num_pieces-1, torrent_file.num_pieces):#range(torrent_file.num_pieces): 
+    for piece_index in range(torrent_file.num_pieces-1,torrent_file.num_pieces):#range(torrent_file.num_pieces): 
 
         find_block = blocks_requested[piece_index].find('0b0')
     
@@ -243,6 +246,7 @@ def run():
    
         except Exception as e:
             print('exception', e)
+
 
 class Peer:
     def __init__(self, ip, port):
@@ -290,9 +294,9 @@ blocks_per_final_piece = math.ceil(final_piece_size / BLOCK_SIZE)
 
 blocks_requested = []
 blocks_received = []
+
 for i in range(torrent_file.num_pieces):
     num_blocks = blocks_per_piece
-
     #last piece may have less blocks
     if i == torrent_file.num_pieces-1:
         num_blocks = blocks_per_final_piece
