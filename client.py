@@ -7,10 +7,11 @@ import select
 
 import requests
 from requests import adapters
+import urllib.parse
 
 import bitstring
 import math
-
+import hashlib
 
 LISTEN_PORT = 7000
 BLOCK_SIZE = 16384
@@ -34,14 +35,16 @@ def tracker_request():
         'event': 'started'
     }
 
+    encoded_params = urllib.parse.urlencode(request_params, quote_via=urllib.parse.quote)
+
     url = torrent_file.data['announce']
 
     session = requests.Session()
-    session.params = request_params
+
     #trackers sometimes respond with ConnectionResetError on valid requests, just retry
     retries = adapters.Retry(total=3, backoff_factor=1) 
-    session.mount('http://', adapters.HTTPAdapter(max_retries=retries))
-    response = session.get(url)
+    session.mount('http://', adapter=adapters.HTTPAdapter(max_retries=retries))
+    response = session.get(url, params=encoded_params)
 
     return bdecode.decode(response.content)
 
@@ -65,8 +68,7 @@ def connect_peers():
         elif errcode == 0: #connected
             connected.append(p_socket)
 
-
-def recieve_message(data, peer_socket):
+def receive_message(data, peer_socket):
     #get peer object from list
     peer_ip = peer_socket.getpeername()
     peer = peer_list[peer_list.index(peer_ip)] 
@@ -74,25 +76,62 @@ def recieve_message(data, peer_socket):
     peer.buffer += data
 
     if peer.handshake == False:
-        recieve_handshake(peer)
+        receive_handshake(peer)
     elif len(peer.buffer) >= 5:
         msg_len = int.from_bytes(peer.buffer[0:4], byteorder='big')
         msg_id = peer.buffer[4]
-
-        print("MSG: ", msg_len, msg_id)
 
         if len(peer.buffer) >= 4+msg_len:
             if msg_id == 0:
                 pass
             elif msg_id == 1:
-                recieve_unchoke(peer)
+                receive_unchoke(peer)
+            elif msg_id == 4:
+                receive_have(peer)
             elif msg_id == 5:
-                recieve_bitfield(peer, msg_len)
+                receive_bitfield(peer, msg_len)
+            elif msg_id == 7:
+                receive_piece(peer, msg_len)
+            else:
+                print("MSG: ", msg_len, msg_id)
 
             peer.buffer = peer.buffer[4+msg_len:]
-            print("BUFFER", peer.buffer)
 
-def recieve_handshake(peer):
+def receive_piece(peer, msg_len):
+
+    index = int.from_bytes(peer.buffer[5:9], byteorder='big')
+    begin = int.from_bytes(peer.buffer[9:13], byteorder='big')
+    block = peer.buffer[13:13+msg_len]
+
+    print("RECIEVED - PIECE:{} BLOCK:{}".format(index, int(begin/BLOCK_SIZE)))
+
+    byte_offset =  index*torrent_file.data['info']['piece length'] + begin
+    fp_out.seek(byte_offset, 0)
+    fp_out.write(block)
+
+    blocks_received[index][int(begin/BLOCK_SIZE)] = True
+    peer.request = False
+
+    validate_piece(index)
+
+def validate_piece(piece_index):
+    if blocks_received[piece_index].all(True):
+        offset = piece_index*20
+        piece_hash = torrent_file.data['info']['pieces'][offset:offset+20]
+
+        fp_out.seek(piece_index*torrent_file.data['info']['piece length'], 0)
+        piece = fp_out.read(torrent_file.data['info']['piece length'])
+
+        if hashlib.sha1(piece).digest() == piece_hash:
+            print("PIECE {} VALID".format(piece_index))
+        else:
+            print("INVALID PIECE")
+
+#TODO: handle have messages    
+def receive_have(peer):
+    print("RECIEVED HAVE")
+
+def receive_handshake(peer):
     if len(peer.buffer) >= 68:
         if peer.buffer[0:20] == b'\x13BitTorrent protocol' and peer.buffer[28:48] == torrent_file.info_hash:
             print("RECEIVED: HANDSHAKE")
@@ -102,34 +141,23 @@ def recieve_handshake(peer):
         else:
             print("invalid peer handshake, dropping connection")
 
-#check if indices are correct for bitfield
-def recieve_bitfield(peer, msg_len):
-        
-        print("BITFIELD LENGTH: ", msg_len-1)
-        print("BUFFER", peer.buffer)
+def receive_bitfield(peer, msg_len):
+    bytes = peer.buffer[5:5+msg_len]
+    peer.bitfield = bitstring.BitArray(bytes)
+    print("RECEIVED: BITFIELD")
+    #print(peer.bitfield.bin)
 
-        bytes = peer.buffer[5:5+msg_len]
-
-        print(len(bytes))
-
-        peer.bitfield = bitstring.BitArray(bytes)
-
-        print("RECIEVED: BITFIELD")
-        print(len(peer.bitfield))
-        print("ACTUAL ", peer.bitfield.bin.count('1'))
-
-def recieve_unchoke(peer):
+def receive_unchoke(peer):
     peer.peer_choking = False
-    print("RECIEVED: UNCHOKE")
-    print(peer.buffer)
+    print("RECEIVED: UNCHOKE")
 
 def send_message(peer_socket):
     #get peer object from list
     peer_ip = peer_socket.getpeername()
     peer = peer_list[peer_list.index(peer_ip)] 
 
-    if peer.am_interested and not peer.peer_choking and not peer.request:
-        send_request(peer_socket, 3, 4, BLOCK_SIZE)
+    if peer.am_interested and not peer.peer_choking and not peer.request: # and not peer.request
+        send_request(peer, peer_socket)
         peer.request = True
         
     elif not peer.am_interested: #check here if a peer has piece we are interested in
@@ -143,20 +171,38 @@ def send_handshake(peer_socket):
     msg = HANDSHAKE + torrent_file.info_hash + peer_id.encode()
     peer_socket.sendall(msg)
 
-def send_request(peer_socket, index, block_index, length):
-    print("SENT REQUEST")
 
-    begin = block_index*BLOCK_SIZE
+#TODO handle case of last piece being different size
+def send_request(peer, peer_socket):
+    request_params = get_request_params(peer)
+   
+    if len(request_params) > 0 and peer.request == False: 
+        peer.request = True 
 
-    blocks_requested[index][block_index] = True
-    print(blocks_requested[index].bin)
+        #print("SENT REQUEST - PIECE:{} BLOCK:{}".format(request_params[0], request_params[1]))
 
-    msg = b'\x00\x00\x00\x0d\x06'
-    msg += index.to_bytes(4, byteorder='big') 
-    msg += begin.to_bytes(4, byteorder='big') 
-    msg += length.to_bytes(4, byteorder='big')
+        begin = request_params[1]*BLOCK_SIZE
+
+        msg = b'\x00\x00\x00\x0d\x06'
+        msg += request_params[0].to_bytes(4, byteorder='big') 
+        msg += begin.to_bytes(4, byteorder='big') 
+        msg += BLOCK_SIZE.to_bytes(4, byteorder='big')
+
+        peer_socket.sendall(msg)
     
-    #peer_socket.sendall(msg)
+def get_request_params(peer):
+
+    for piece_index in range(torrent_file.num_pieces): 
+
+        find_block = blocks_requested[piece_index].find('0b0')
+    
+        #check if we are missing a block and if peer has this piece
+        if len(find_block) > 0 and peer.bitfield[piece_index] == True:
+            block_index = find_block[0]
+            blocks_requested[piece_index][block_index] = True
+            return (piece_index, block_index)
+        
+    return ()
 
 def run():
     while True:
@@ -164,9 +210,9 @@ def run():
             readable, writable, exceptions = select.select(connected, connecting + connected, [])
 
             for sock in readable:
-                data = sock.recv(8192)
+                data = sock.recv(BLOCK_SIZE)
                 if data:
-                    recieve_message(data, sock)
+                    receive_message(data, sock)
                 else:
                     connected.remove(sock)
 
@@ -178,12 +224,12 @@ def run():
                         connected.append(sock)
                         send_handshake(sock)
                         print("{} connected: {}".format(len(connected), sock))
-                        connecting.clear() #TESTING, REMOVE ME
+                        #connecting.clear() #TESTING, REMOVE ME
                     else:
                         connecting.remove(sock)
                 if sock in connected:
                     send_message(sock)
-                    
+   
         except Exception as e:
             print('exception', e)
 
@@ -201,35 +247,38 @@ class Peer:
 
         self.request = False
 
+
     def __eq__(self, obj):
         return self.address == obj
 
 
 peer_list = []
-
 connecting = []
 connected = []
 
-torrent_file = torrent.Torrent('mint.torrent')
+torrent_file = torrent.Torrent('c.torrent')
 peer_id = generate_peer_id()
 
-tracker_response = tracker_request()
-print(tracker_response)
+a = open(torrent_file.data['info']['name'], 'a+') #create file if it doesn't exist
+a.close()
 
+fp_out = open(torrent_file.data['info']['name'], 'r+b') #open file for reading and writing
+
+print("FILENAME: ", torrent_file.data['info']['name'])
+print("FILESIZE", torrent_file.length)
 print("MULTIFILE: ", torrent_file.is_multi)
 print("NUM PIECES: " + str(torrent_file.num_pieces))
 print("PIECE SIZE: " + str(torrent_file.data['info']['piece length']))
 print("BLOCK SIZE:",  str(BLOCK_SIZE))
 
-
+tracker_response = tracker_request()
 blocks_per_piece = math.ceil(torrent_file.data['info']['piece length'] / BLOCK_SIZE)
 
-print("BLOCKS PER PIECE:", str(blocks_per_piece))
-
 blocks_requested = []
-for k in range(0, torrent_file.num_pieces):
+blocks_received = []
+for i in range(torrent_file.num_pieces):
     blocks_requested.append(bitstring.BitArray(blocks_per_piece))
-
+    blocks_received.append(bitstring.BitArray(blocks_per_piece))
 
 peer_list = decode_compact_peer_list(tracker_response['peers'])
 
@@ -239,8 +288,6 @@ print()
 
 connect_peers()
 run()
-
-
 
 
 
