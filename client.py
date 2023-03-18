@@ -174,25 +174,36 @@ def send_handshake(peer_socket):
 
 #TODO handle case of last piece being different size
 def send_request(peer, peer_socket):
-    request_params = get_request_params(peer)
-   
+    request_params = select_block(peer)
+
     if len(request_params) > 0 and peer.request == False: 
+
+        piece_index = request_params[0]
+        block_index = request_params[1]
+
+        length = BLOCK_SIZE
+
+        #final block may have different size
+        if piece_index == torrent_file.num_pieces-1 and block_index == blocks_per_final_piece-1:
+            length = final_piece_size - (blocks_per_final_piece-1)*BLOCK_SIZE
+            print("LOL!", length)
+
         peer.request = True 
 
         #print("SENT REQUEST - PIECE:{} BLOCK:{}".format(request_params[0], request_params[1]))
 
-        begin = request_params[1]*BLOCK_SIZE
+        begin = block_index*BLOCK_SIZE
 
         msg = b'\x00\x00\x00\x0d\x06'
-        msg += request_params[0].to_bytes(4, byteorder='big') 
+        msg += piece_index.to_bytes(4, byteorder='big') 
         msg += begin.to_bytes(4, byteorder='big') 
-        msg += BLOCK_SIZE.to_bytes(4, byteorder='big')
+        msg += length.to_bytes(4, byteorder='big')
 
         peer_socket.sendall(msg)
     
-def get_request_params(peer):
+def select_block(peer):
 
-    for piece_index in range(torrent_file.num_pieces): 
+    for piece_index in range(torrent_file.num_pieces-1, torrent_file.num_pieces):#range(torrent_file.num_pieces): 
 
         find_block = blocks_requested[piece_index].find('0b0')
     
@@ -274,11 +285,20 @@ print("BLOCK SIZE:",  str(BLOCK_SIZE))
 tracker_response = tracker_request()
 blocks_per_piece = math.ceil(torrent_file.data['info']['piece length'] / BLOCK_SIZE)
 
+final_piece_size = torrent_file.length - (torrent_file.num_pieces-1)*torrent_file.data['info']['piece length']
+blocks_per_final_piece = math.ceil(final_piece_size / BLOCK_SIZE)
+
 blocks_requested = []
 blocks_received = []
 for i in range(torrent_file.num_pieces):
-    blocks_requested.append(bitstring.BitArray(blocks_per_piece))
-    blocks_received.append(bitstring.BitArray(blocks_per_piece))
+    num_blocks = blocks_per_piece
+
+    #last piece may have less blocks
+    if i == torrent_file.num_pieces-1:
+        num_blocks = blocks_per_final_piece
+
+    blocks_requested.append(bitstring.BitArray(num_blocks))
+    blocks_received.append(bitstring.BitArray(num_blocks))
 
 peer_list = decode_compact_peer_list(tracker_response['peers'])
 
@@ -287,6 +307,10 @@ for p in peer_list:
 print()
 
 connect_peers()
+
+print(final_piece_size/BLOCK_SIZE)
+print(len(blocks_requested[torrent_file.num_pieces-1]))
+
 run()
 
 
