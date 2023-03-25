@@ -18,7 +18,7 @@ class MessageHandler:
 
             if len(peer.buffer) >= 4+msg_len:
                 if msg_id == 0:
-                    pass
+                    self.receive_choke(peer)
                 elif msg_id == 1:
                     self.receive_unchoke(peer)
                 elif msg_id == 4:
@@ -50,16 +50,19 @@ class MessageHandler:
             if peer.buffer[0:20] == b'\x13BitTorrent protocol' and peer.buffer[28:48] == self.torrent_file.info_hash:
                 print("RECEIVED: HANDSHAKE")
                 peer.received_handshake = True
-            else:
-                #invalid handshake, drop connection
+            else: #invalid handshake, drop connection
                 peer_list.remove(peer)
                 raise ValueError("Invalid Handshake Message")
             
         peer.buffer = peer.buffer[68:]
 
-
     def receive_unchoke(self, peer):
-        pass
+        print("RECEIVED: UNCHOKE")
+        peer.peer_choking = False
+
+    def receive_choke(self, peer):
+        print("RECEIVED: CHOKE")
+        peer.peer_choking = True
 
     def receive_have(self, peer):
         pass
