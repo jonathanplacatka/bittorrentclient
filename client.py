@@ -135,7 +135,10 @@ def validate_piece(piece_index):
 
 #TODO: handle have messages    
 def receive_have(peer):
-    print("RECIEVED HAVE")
+    print("RECIEVED HAVE: INDEX {}".format(index))
+    index = int.from_bytes(peer.buffer[5:9], byteorder='big')
+    peer.bitfield[index] = True
+
 
 def receive_handshake(peer):
     if len(peer.buffer) >= 68:
@@ -266,12 +269,13 @@ class Peer:
     def __eq__(self, obj):
         return self.address == obj
 
+#TODO: create main/startup methods
 
 peer_list = []
 connecting = []
 connected = []
 
-torrent_file = torrent.Torrent('c.torrent')
+torrent_file = torrent.Torrent('mint.torrent')
 peer_id = generate_peer_id()
 
 a = open(torrent_file.data['info']['name'], 'a+') #create file if it doesn't exist
