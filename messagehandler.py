@@ -1,3 +1,4 @@
+import bitstring
 
 class MessageHandler:
 
@@ -38,12 +39,6 @@ class MessageHandler:
         if peer.sent_handshake == False:
             self.send_handshake(peer_socket)
             peer.sent_handshake = True
-        
-    def send_handshake(self, peer_socket):
-        print("SENT HANDSHAKE")
-        HANDSHAKE = b'\x13BitTorrent protocol\x00\x00\x00\x00\x00\x00\x00\x00'
-        msg = HANDSHAKE + self.torrent_file.info_hash + self.peer_id.encode()
-        peer_socket.sendall(msg)
 
     def receive_handshake(self, peer, peer_list):
         if len(peer.buffer) >= 68:
@@ -65,13 +60,23 @@ class MessageHandler:
         peer.peer_choking = True
 
     def receive_have(self, peer):
-        pass
+        print("RECIEVED HAVE: INDEX {}".format(index))
+        index = int.from_bytes(peer.buffer[5:9], byteorder='big')
+        peer.bitfield[index] = True
 
     def receive_bitfield(self, peer, msg_len):
-        pass
+        print("RECEIVED: BITFIELD")
+        bytes = peer.buffer[5:5+msg_len]
+        peer.bitfield = bitstring.BitArray(bytes)
 
     def receive_piece(self, peer, msg_len):
         pass
+
+    def send_handshake(self, peer_socket):
+        print("SENT HANDSHAKE")
+        HANDSHAKE = b'\x13BitTorrent protocol\x00\x00\x00\x00\x00\x00\x00\x00'
+        msg = HANDSHAKE + self.torrent_file.info_hash + self.peer_id.encode()
+        peer_socket.sendall(msg)
 
     def get_peer_from_socket(self, socket, peer_list):
         peer_ip = socket.getpeername()
