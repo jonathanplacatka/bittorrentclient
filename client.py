@@ -241,14 +241,15 @@ def run():
                         sock.setblocking(True)
                         connecting.remove(sock)
                         connected.append(sock)
-                        #send_handshake(sock)
                         print("{} connected: {}".format(len(connected), sock))
                         #connecting.clear() #TESTING, REMOVE ME
                     else:
                         connecting.remove(sock)
                 if sock in connected:
                     msg_handler.send(sock, peer_list)
-   
+        
+        except ValueError:
+            connected.remove(sock)    
         except Exception as e:
             print('exception', e)
 
