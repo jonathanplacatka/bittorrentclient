@@ -1,15 +1,16 @@
 
 class MessageHandler:
 
-    def __init__(self, torrent_file):
+    def __init__(self, torrent_file, peer_id):
         self.torrent_file = torrent_file
+        self.peer_id = peer_id
 
     def receive(self, data, peer_socket, peer_list):
-        
+
         peer = self.get_peer_from_socket(peer_socket, peer_list)
         peer.buffer += data
 
-        if peer.handshake == False:
+        if peer.received_handshake == False:
             self.receive_handshake(peer)
         elif len(peer.buffer) >= 5:
             msg_len = int.from_bytes(peer.buffer[0:4], byteorder='big')
@@ -29,13 +30,27 @@ class MessageHandler:
                 else:
                     print("UNIMPLEMENTED MESSAGE: ", msg_len, msg_id)
 
-                peer.buffer = peer.buffer[4+msg_len:]
+                peer.buffer = peer.buffer[4+msg_len:] #clear message from buffer
+
+    def send(self, peer_socket, peer_list):
+        peer = self.get_peer_from_socket(peer_socket, peer_list)
+
+        if peer.sent_handshake == False:
+            self.send_handshake(peer_socket)
+            peer.sent_handshake = True
+        
+    def send_handshake(self, peer_socket):
+        print("SENT HANDSHAKE")
+        HANDSHAKE = b'\x13BitTorrent protocol\x00\x00\x00\x00\x00\x00\x00\x00'
+        msg = HANDSHAKE + self.torrent_file.info_hash + self.peer_id.encode()
+        peer_socket.sendall(msg)
+
 
     def receive_handshake(self, peer):
         if len(peer.buffer) >= 68:
             if peer.buffer[0:20] == b'\x13BitTorrent protocol' and peer.buffer[28:48] == self.torrent_file.info_hash:
                 print("RECEIVED: HANDSHAKE")
-                peer.handshake = True
+                peer.received_handshake = True
             else:
                 print("invalid peer handshake, dropping connection")
 

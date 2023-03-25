@@ -241,13 +241,13 @@ def run():
                         sock.setblocking(True)
                         connecting.remove(sock)
                         connected.append(sock)
-                        send_handshake(sock)
+                        #send_handshake(sock)
                         print("{} connected: {}".format(len(connected), sock))
-                        connecting.clear() #TESTING, REMOVE ME
+                        #connecting.clear() #TESTING, REMOVE ME
                     else:
                         connecting.remove(sock)
-                #if sock in connected:
-                    #send_message(sock)
+                if sock in connected:
+                    msg_handler.send(sock, peer_list)
    
         except Exception as e:
             print('exception', e)
@@ -256,7 +256,10 @@ def run():
 class Peer:
     def __init__(self, ip, port):
         self.address = (ip, port)
-        self.handshake = False
+
+        self.sent_handshake = False
+        self.received_handshake = False
+
         self.buffer = b''
         self.bitfield = bitstring.BitArray(torrent_file.num_pieces)
 
@@ -301,7 +304,7 @@ blocks_per_final_piece = math.ceil(final_piece_size / BLOCK_SIZE)
 blocks_requested = []
 blocks_received = []
 
-msg_handler = messagehandler.MessageHandler(torrent_file)
+msg_handler = messagehandler.MessageHandler(torrent_file, peer_id)
 
 for i in range(torrent_file.num_pieces):
     num_blocks = blocks_per_piece
