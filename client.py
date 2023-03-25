@@ -1,4 +1,6 @@
 import torrent
+import messagehandler
+
 import random
 
 import bdecode
@@ -229,7 +231,7 @@ def run():
             for sock in readable:
                 data = sock.recv(BLOCK_SIZE)
                 if data:
-                    receive_message(data, sock)
+                   msg_handler.receive(data, sock, peer_list)
                 else:
                     connected.remove(sock)
 
@@ -241,11 +243,11 @@ def run():
                         connected.append(sock)
                         send_handshake(sock)
                         print("{} connected: {}".format(len(connected), sock))
-                        #connecting.clear() #TESTING, REMOVE ME
+                        connecting.clear() #TESTING, REMOVE ME
                     else:
                         connecting.remove(sock)
-                if sock in connected:
-                    send_message(sock)
+                #if sock in connected:
+                    #send_message(sock)
    
         except Exception as e:
             print('exception', e)
@@ -298,6 +300,8 @@ blocks_per_final_piece = math.ceil(final_piece_size / BLOCK_SIZE)
 
 blocks_requested = []
 blocks_received = []
+
+msg_handler = messagehandler.MessageHandler(torrent_file)
 
 for i in range(torrent_file.num_pieces):
     num_blocks = blocks_per_piece
