@@ -70,7 +70,7 @@ class MessageHandler:
         begin = int.from_bytes(peer.buffer[9:13], byteorder='big')
         block = peer.buffer[13:13+msg_len]
 
-        print("RECIEVED - PIECE:{} BLOCK:{}".format(index, int(begin/BLOCK_SIZE)))
+        #print("RECIEVED - PIECE:{} BLOCK:{}".format(index, int(begin/BLOCK_SIZE)))
 
         self.file_handler.write(index, begin, block)
         peer.request = False
@@ -97,7 +97,7 @@ class MessageHandler:
 
         if len(request_params) > 0 and peer.request == False: 
             
-            print("SENT REQUEST - PIECE:{} BLOCK:{}".format(request_params[0], request_params[1]))
+            #print("SENT REQUEST - PIECE:{} BLOCK:{}".format(request_params[0], request_params[1]))
 
             piece_index = request_params[0]
             block_index = request_params[1]
