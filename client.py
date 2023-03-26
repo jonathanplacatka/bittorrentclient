@@ -42,7 +42,7 @@ def tracker_request():
     session = requests.Session()
 
     #trackers sometimes respond with ConnectionResetError on valid requests, just retry
-    retries = adapters.Retry(total=5, backoff_factor=1) 
+    retries = adapters.Retry(total=5, backoff_factor=0.2) 
     session.mount('http://', adapter=adapters.HTTPAdapter(max_retries=retries))
     response = session.get(url, params=encoded_params)
 
@@ -75,9 +75,6 @@ def connect_peers():
             connecting.append(p_socket)
         elif errcode == 0: #connected
             connected.append(p_socket)
-        else:
-            print("CRINGE1!", errcode)
-            exit()
 
 def run():
     while True:
@@ -87,29 +84,25 @@ def run():
             for sock in readable:
                 data = sock.recv(BLOCK_SIZE)
                 if data:
-                   msg_handler.receive(data, sock, peer_list)
+                   msg_handler.receive(data, get_peer_from_socket(sock))
                 else:
                     print("peer closed connection")
                     drop_connection(sock)
                    
             for sock in writable:
                 if sock in connecting:
-
-                    errno = sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR) 
-                    
-
-                    if errno == 0:
+                    if sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR) == 0:
                         sock.setblocking(True)
                         connecting.remove(sock)
                         connected.append(sock)
-                        print("{} connected: {}".format(len(connected), sock))
+                        print("{} connected: {}".format(len(connected), sock.getpeername()))
                         #connecting.clear() #TESTING, REMOVE ME
                     else:
                         connecting.remove(sock)
                        
                 if sock in connected:
                     try:
-                        msg_handler.send(sock, peer_list)
+                        msg_handler.send(get_peer_from_socket(sock), sock)
                     except Exception as e:
                         print("failed to send: ", e)
                         drop_connection(sock)
@@ -119,12 +112,11 @@ def run():
         except Exception as e:
             print('exception', e)
 
-
 def drop_connection(peer_socket):
     print("CONNECTION DROPPED")
 
     connected.remove(peer_socket)
-    peer = get_peer_from_socket(peer_socket, peer_list)
+    peer = get_peer_from_socket(peer_socket)
 
     #re-request outstanding pieces
     for indices in peer.requested:
@@ -132,8 +124,7 @@ def drop_connection(peer_socket):
         block = indices[1]
         file_handler.blocks_requested[piece][block] = file_handler.blocks_received[piece][block]
          
-   
-def get_peer_from_socket(socket, peer_list):
+def get_peer_from_socket(socket):
     peer_ip = socket.getpeername()
     index = peer_list.index(peer_ip)
     return peer_list[index]

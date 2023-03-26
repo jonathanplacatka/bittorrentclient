@@ -1,6 +1,7 @@
 import bitstring
 
 BLOCK_SIZE = 16384
+BLOCKS_PER_REQUEST = 6
 
 class MessageHandler:
 
@@ -9,13 +10,11 @@ class MessageHandler:
         self.peer_id = peer_id
         self.file_handler = file_handler
 
-    def receive(self, data, peer_socket, peer_list):
-
-        peer = self.get_peer_from_socket(peer_socket, peer_list)
+    def receive(self, data, peer):
         peer.buffer += data
 
         if peer.received_handshake == False:
-            self.receive_handshake(peer, peer_list)
+            self.receive_handshake(peer)
         elif len(peer.buffer) >= 5:
             msg_len = int.from_bytes(peer.buffer[0:4], byteorder='big')
             msg_id = peer.buffer[4]
@@ -36,13 +35,12 @@ class MessageHandler:
 
                 peer.buffer = peer.buffer[4+msg_len:] #clear message from buffer
 
-    def receive_handshake(self, peer, peer_list):
+    def receive_handshake(self, peer):
         if len(peer.buffer) >= 68:
             if peer.buffer[0:20] == b'\x13BitTorrent protocol' and peer.buffer[28:48] == self.torrent.info_hash:
                 #print("RECEIVED: HANDSHAKE")
                 peer.received_handshake = True
             else: #invalid handshake, drop connection
-                peer_list.remove(peer)
                 raise ValueError("Invalid Handshake Message")
             
         peer.buffer = peer.buffer[68:]
@@ -78,6 +76,10 @@ class MessageHandler:
         peer.request = False
         peer.requested.remove((index, block_index))
 
+        if self.file_handler.bitfield[0:self.torrent.num_pieces].all(True):
+            print("download complete!")
+            exit()
+
     def send_handshake(self, peer, peer_socket):
         #print("SENT HANDSHAKE")
         HANDSHAKE = b'\x13BitTorrent protocol\x00\x00\x00\x00\x00\x00\x00\x00'
@@ -85,49 +87,44 @@ class MessageHandler:
         peer_socket.sendall(msg)
         peer.sent_handshake = True
 
-    def send(self, peer_socket, peer_list):
-        peer = self.get_peer_from_socket(peer_socket, peer_list)
-
+    def send(self, peer, peer_socket):
         if peer.sent_handshake == False:
             self.send_handshake(peer, peer_socket)
         elif not peer.am_interested and self.file_handler.check_interest(peer): 
             self.send_interested(peer, peer_socket)
-        elif peer.am_interested and not peer.peer_choking and not peer.requested:
+        elif peer.am_interested and not peer.peer_choking and len(peer.requested) == 0:
             self.send_request(peer, peer_socket)
 
     def send_request(self, peer, peer_socket):
-        request_params = self.file_handler.select_block(peer)
+        msg = b''
 
-        if len(request_params) > 0: 
-            
+        for i in range(0, BLOCKS_PER_REQUEST):
+            request_params = self.file_handler.select_block(peer)
+
             #print("SENT REQUEST - PIECE:{} BLOCK:{}".format(request_params[0], request_params[1]))
-
-            piece_index = request_params[0]
-            block_index = request_params[1]
-
-            length = BLOCK_SIZE
-            begin = block_index*BLOCK_SIZE
-
-            #final block may have different size
-            if piece_index == self.torrent.num_pieces-1 and block_index == self.torrent.blocks_per_final_piece-1:
-                length = self.torrent.final_piece_size - (self.torrent.blocks_per_final_piece-1)*BLOCK_SIZE
-
-            peer.request = True 
-            peer.requested.append((piece_index, block_index))
             
-            msg = b'\x00\x00\x00\x0d\x06'
-            msg += piece_index.to_bytes(4, byteorder='big') 
-            msg += begin.to_bytes(4, byteorder='big') 
-            msg += length.to_bytes(4, byteorder='big')
+            if len(request_params) > 0:
+                piece_index = request_params[0]
+                block_index = request_params[1]
 
-            peer_socket.sendall(msg)
+                length = BLOCK_SIZE
+                begin = block_index*BLOCK_SIZE
+
+                #final block may have different size
+                if piece_index == self.torrent.num_pieces-1 and block_index == self.torrent.blocks_per_final_piece-1:
+                    length = self.torrent.final_piece_size - (self.torrent.blocks_per_final_piece-1)*BLOCK_SIZE
+
+                peer.request = True 
+                peer.requested.append((piece_index, block_index))
+            
+                msg += b'\x00\x00\x00\x0d\x06'
+                msg += piece_index.to_bytes(4, byteorder='big') 
+                msg += begin.to_bytes(4, byteorder='big') 
+                msg += length.to_bytes(4, byteorder='big')
+
+        peer_socket.sendall(msg)
 
     def send_interested(self, peer, peer_socket):
         #print("SENDING INTERESTED")
         peer_socket.sendall(b'\x00\x00\x00\x01\x02')
         peer.am_interested = True
-
-    def get_peer_from_socket(self, socket, peer_list):
-        peer_ip = socket.getpeername()
-        index = peer_list.index(peer_ip)
-        return peer_list[index]
