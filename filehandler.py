@@ -6,6 +6,8 @@ BLOCK_SIZE = 16384
 class FileHandler:
 
     def __init__(self, torrent):
+
+        self.torrent = torrent
         self.blocks_requested = []
         self.blocks_received = []
         

@@ -36,14 +36,6 @@ class MessageHandler:
 
                 peer.buffer = peer.buffer[4+msg_len:] #clear message from buffer
 
-    def send(self, peer_socket, peer_list):
-        peer = self.get_peer_from_socket(peer_socket, peer_list)
-
-        if peer.sent_handshake == False:
-            self.send_handshake(peer, peer_socket)
-        elif peer.am_interested and not peer.peer_choking and not peer.request:
-            self.send_request(peer, peer_socket)
-
     def receive_handshake(self, peer, peer_list):
         if len(peer.buffer) >= 68:
             if peer.buffer[0:20] == b'\x13BitTorrent protocol' and peer.buffer[28:48] == self.torrent.info_hash:
@@ -64,8 +56,8 @@ class MessageHandler:
         peer.peer_choking = True
 
     def receive_have(self, peer):
-        print("RECIEVED HAVE: INDEX {}".format(index))
         index = int.from_bytes(peer.buffer[5:9], byteorder='big')
+        print("RECIEVED HAVE: INDEX {}".format(index))
         peer.bitfield[index] = True
 
     def receive_bitfield(self, peer, msg_len):
@@ -74,11 +66,11 @@ class MessageHandler:
         peer.bitfield = bitstring.BitArray(bytes)
 
     def receive_piece(self, peer, msg_len):
-        print("RECIEVED - PIECE:{} BLOCK:{}".format(index, int(begin/BLOCK_SIZE)))
-
         index = int.from_bytes(peer.buffer[5:9], byteorder='big')
         begin = int.from_bytes(peer.buffer[9:13], byteorder='big')
         block = peer.buffer[13:13+msg_len]
+
+        print("RECIEVED - PIECE:{} BLOCK:{}".format(index, int(begin/BLOCK_SIZE)))
 
         self.file_handler.write(index, begin, block)
         peer.request = False
@@ -89,6 +81,16 @@ class MessageHandler:
         msg = HANDSHAKE + self.torrent.info_hash + self.peer_id.encode()
         peer_socket.sendall(msg)
         peer.sent_handshake = True
+
+    def send(self, peer_socket, peer_list):
+        peer = self.get_peer_from_socket(peer_socket, peer_list)
+
+        if peer.sent_handshake == False:
+            self.send_handshake(peer, peer_socket)
+        elif not peer.am_interested: #TODO: check if peer has piece we are interested in
+            self.send_interested(peer, peer_socket)
+        elif peer.am_interested and not peer.peer_choking and not peer.request:
+            self.send_request(peer, peer_socket)
 
     def send_request(self, peer, peer_socket):
         request_params = self.file_handler.select_block(peer)
@@ -115,6 +117,11 @@ class MessageHandler:
             msg += length.to_bytes(4, byteorder='big')
 
             peer_socket.sendall(msg)
+
+    def send_interested(self, peer, peer_socket):
+        print("SENDING INTERESTED")
+        peer_socket.sendall(b'\x00\x00\x00\x01\x02')
+        peer.am_interested = True
 
     def get_peer_from_socket(self, socket, peer_list):
         peer_ip = socket.getpeername()
