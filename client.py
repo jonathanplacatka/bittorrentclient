@@ -135,7 +135,7 @@ peer_list = []
 connecting = []
 connected = []
 
-torrent = torrent.Torrent('c.torrent')
+torrent = torrent.Torrent('dataset.torrent')
 peer_id = generate_peer_id()
 
 print("FILENAME: ", torrent.data['info']['name'])

@@ -18,7 +18,6 @@ class Peer:
         self.peer_choking = True
         self.peer_interested = False
 
-        self.request = False
         self.requested = []
 
     def __eq__(self, obj):

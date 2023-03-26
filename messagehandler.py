@@ -73,7 +73,6 @@ class MessageHandler:
         #print("RECIEVED - PIECE:{} BLOCK:{}".format(index, block_index))
 
         self.file_handler.write(index, begin, block)
-        peer.request = False
         peer.requested.remove((index, block_index))
 
         if self.file_handler.bitfield[0:self.torrent.num_pieces].all(True):
@@ -114,7 +113,6 @@ class MessageHandler:
                 if piece_index == self.torrent.num_pieces-1 and block_index == self.torrent.blocks_per_final_piece-1:
                     length = self.torrent.final_piece_size - (self.torrent.blocks_per_final_piece-1)*BLOCK_SIZE
 
-                peer.request = True 
                 peer.requested.append((piece_index, block_index))
             
                 msg += b'\x00\x00\x00\x0d\x06'
