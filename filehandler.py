@@ -9,7 +9,6 @@ class FileHandler:
         self.blocks_requested = []
         self.blocks_received = []
         
-
         open(torrent.data['info']['name'], 'a+').close() #create file if it doesn't exist
         self.fp_out = open(torrent.data['info']['name'], 'r+b') #open file for reading and writing
     
@@ -54,5 +53,16 @@ class FileHandler:
                 self.blocks_requested[piece_index] = bitstring.BitArray(num_blocks)
                 self.blocks_received[piece_index] = bitstring.BitArray(num_blocks)
 
-    def select_block(self, block):
-        pass
+    def select_block(self, peer):
+
+        for piece_index in range(self.torrent.num_pieces): 
+
+            find_block = self.blocks_requested[piece_index].find('0b0')
+        
+            #if we are missing a block and if peer has this piece
+            if len(find_block) > 0 and peer.bitfield[piece_index] == True:
+                block_index = find_block[0]
+                self.blocks_requested[piece_index][block_index] = True
+                return (piece_index, block_index)
+            
+        return ()

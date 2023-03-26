@@ -4,8 +4,8 @@ BLOCK_SIZE = 16384
 
 class MessageHandler:
 
-    def __init__(self, torrent_file, peer_id, file_handler):
-        self.torrent_file = torrent_file
+    def __init__(self, torrent, peer_id, file_handler):
+        self.torrent = torrent
         self.peer_id = peer_id
         self.file_handler = file_handler
 
@@ -40,12 +40,13 @@ class MessageHandler:
         peer = self.get_peer_from_socket(peer_socket, peer_list)
 
         if peer.sent_handshake == False:
-            self.send_handshake(peer_socket)
-            peer.sent_handshake = True
+            self.send_handshake(peer, peer_socket)
+        elif peer.am_interested and not peer.peer_choking and not peer.request:
+            self.send_request(peer, peer_socket)
 
     def receive_handshake(self, peer, peer_list):
         if len(peer.buffer) >= 68:
-            if peer.buffer[0:20] == b'\x13BitTorrent protocol' and peer.buffer[28:48] == self.torrent_file.info_hash:
+            if peer.buffer[0:20] == b'\x13BitTorrent protocol' and peer.buffer[28:48] == self.torrent.info_hash:
                 print("RECEIVED: HANDSHAKE")
                 peer.received_handshake = True
             else: #invalid handshake, drop connection
@@ -82,11 +83,38 @@ class MessageHandler:
         self.file_handler.write(index, begin, block)
         peer.request = False
 
-    def send_handshake(self, peer_socket):
+    def send_handshake(self, peer, peer_socket):
         print("SENT HANDSHAKE")
         HANDSHAKE = b'\x13BitTorrent protocol\x00\x00\x00\x00\x00\x00\x00\x00'
-        msg = HANDSHAKE + self.torrent_file.info_hash + self.peer_id.encode()
+        msg = HANDSHAKE + self.torrent.info_hash + self.peer_id.encode()
         peer_socket.sendall(msg)
+        peer.sent_handshake = True
+
+    def send_request(self, peer, peer_socket):
+        request_params = self.file_handler.select_block(peer)
+
+        if len(request_params) > 0 and peer.request == False: 
+            
+            print("SENT REQUEST - PIECE:{} BLOCK:{}".format(request_params[0], request_params[1]))
+
+            piece_index = request_params[0]
+            block_index = request_params[1]
+
+            length = BLOCK_SIZE
+            begin = block_index*BLOCK_SIZE
+
+            #final block may have different size
+            if piece_index == self.torrent.num_pieces-1 and block_index == self.torrent.blocks_per_final_piece-1:
+                length = self.torrent.final_piece_size - (self.torrent_fileblocks_per_final_piece-1)*BLOCK_SIZE
+
+            peer.request = True 
+
+            msg = b'\x00\x00\x00\x0d\x06'
+            msg += piece_index.to_bytes(4, byteorder='big') 
+            msg += begin.to_bytes(4, byteorder='big') 
+            msg += length.to_bytes(4, byteorder='big')
+
+            peer_socket.sendall(msg)
 
     def get_peer_from_socket(self, socket, peer_list):
         peer_ip = socket.getpeername()
