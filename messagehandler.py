@@ -39,7 +39,7 @@ class MessageHandler:
     def receive_handshake(self, peer, peer_list):
         if len(peer.buffer) >= 68:
             if peer.buffer[0:20] == b'\x13BitTorrent protocol' and peer.buffer[28:48] == self.torrent.info_hash:
-                print("RECEIVED: HANDSHAKE")
+                #print("RECEIVED: HANDSHAKE")
                 peer.received_handshake = True
             else: #invalid handshake, drop connection
                 peer_list.remove(peer)
@@ -48,11 +48,11 @@ class MessageHandler:
         peer.buffer = peer.buffer[68:]
 
     def receive_unchoke(self, peer):
-        print("RECEIVED: UNCHOKE")
+        #print("RECEIVED: UNCHOKE")
         peer.peer_choking = False
 
     def receive_choke(self, peer):
-        print("RECEIVED: CHOKE")
+        #print("RECEIVED: CHOKE")
         peer.peer_choking = True
 
     def receive_have(self, peer):
@@ -62,13 +62,13 @@ class MessageHandler:
 
     def receive_bitfield(self, peer, msg_len):
         print("RECEIVED: BITFIELD")
-        bytes = peer.buffer[5:5+msg_len]
+        bytes = peer.buffer[5:5+msg_len-1]
         peer.bitfield = bitstring.BitArray(bytes)
 
     def receive_piece(self, peer, msg_len):
         index = int.from_bytes(peer.buffer[5:9], byteorder='big')
         begin = int.from_bytes(peer.buffer[9:13], byteorder='big')
-        block = peer.buffer[13:13+msg_len]
+        block = peer.buffer[13:13+msg_len-9]
 
         #print("RECIEVED - PIECE:{} BLOCK:{}".format(index, int(begin/BLOCK_SIZE)))
 
@@ -76,7 +76,7 @@ class MessageHandler:
         peer.request = False
 
     def send_handshake(self, peer, peer_socket):
-        print("SENT HANDSHAKE")
+        #print("SENT HANDSHAKE")
         HANDSHAKE = b'\x13BitTorrent protocol\x00\x00\x00\x00\x00\x00\x00\x00'
         msg = HANDSHAKE + self.torrent.info_hash + self.peer_id.encode()
         peer_socket.sendall(msg)
@@ -87,7 +87,7 @@ class MessageHandler:
 
         if peer.sent_handshake == False:
             self.send_handshake(peer, peer_socket)
-        elif not peer.am_interested: #TODO: check if peer has piece we are interested in
+        elif not peer.am_interested and self.file_handler.check_interest(peer): #TODO: check if peer has piece we are interested in
             self.send_interested(peer, peer_socket)
         elif peer.am_interested and not peer.peer_choking and not peer.request:
             self.send_request(peer, peer_socket)
@@ -119,7 +119,7 @@ class MessageHandler:
             peer_socket.sendall(msg)
 
     def send_interested(self, peer, peer_socket):
-        print("SENDING INTERESTED")
+        #print("SENDING INTERESTED")
         peer_socket.sendall(b'\x00\x00\x00\x01\x02')
         peer.am_interested = True
 
