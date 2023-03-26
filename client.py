@@ -118,8 +118,8 @@ def receive_piece(peer, msg_len):
 
 def validate_piece(piece_index):
     if blocks_received[piece_index].all(True):
-        offset = piece_index*20
-        piece_hash = torrent_file.data['info']['pieces'][offset:offset+20]
+        hash_offset = piece_index*20
+        piece_hash = torrent_file.data['info']['pieces'][hash_offset:hash_offset+20]
 
         fp_out.seek(piece_index*torrent_file.data['info']['piece length'], 0)
         piece = fp_out.read(torrent_file.data['info']['piece length'])
@@ -129,13 +129,13 @@ def validate_piece(piece_index):
         else: #invalid piece, re-request all blocks
             print("INVALID PIECE")
             num_blocks = blocks_per_piece 
+            
             if piece_index == torrent_file.num_pieces-1:
                 num_blocks = blocks_per_final_piece
 
             blocks_requested[piece_index] = bitstring.BitArray(num_blocks)
             blocks_received[piece_index] = bitstring.BitArray(num_blocks)
 
-#TODO: handle have messages    
 def receive_have(peer):
     print("RECIEVED HAVE: INDEX {}".format(index))
     index = int.from_bytes(peer.buffer[5:9], byteorder='big')
@@ -284,8 +284,7 @@ connected = []
 torrent_file = torrent.Torrent('mint.torrent')
 peer_id = generate_peer_id()
 
-a = open(torrent_file.data['info']['name'], 'a+') #create file if it doesn't exist
-a.close()
+open(torrent_file.data['info']['name'], 'a+').close() #create file if it doesn't exist
 
 fp_out = open(torrent_file.data['info']['name'], 'r+b') #open file for reading and writing
 
@@ -305,7 +304,7 @@ blocks_per_final_piece = math.ceil(final_piece_size / BLOCK_SIZE)
 blocks_requested = []
 blocks_received = []
 
-msg_handler = messagehandler.MessageHandler(torrent_file, peer_id)
+
 
 for i in range(torrent_file.num_pieces):
     num_blocks = blocks_per_piece
@@ -315,6 +314,9 @@ for i in range(torrent_file.num_pieces):
 
     blocks_requested.append(bitstring.BitArray(num_blocks))
     blocks_received.append(bitstring.BitArray(num_blocks))
+
+
+msg_handler = messagehandler.MessageHandler(torrent_file, peer_id, blocks_received, fp_out)
 
 peer_list = decode_compact_peer_list(tracker_response['peers'])
 
