@@ -87,7 +87,7 @@ class MessageHandler:
 
         if peer.sent_handshake == False:
             self.send_handshake(peer, peer_socket)
-        elif not peer.am_interested and self.file_handler.check_interest(peer): #TODO: check if peer has piece we are interested in
+        elif not peer.am_interested and self.file_handler.check_interest(peer): 
             self.send_interested(peer, peer_socket)
         elif peer.am_interested and not peer.peer_choking and not peer.request:
             self.send_request(peer, peer_socket)
@@ -107,7 +107,7 @@ class MessageHandler:
 
             #final block may have different size
             if piece_index == self.torrent.num_pieces-1 and block_index == self.torrent.blocks_per_final_piece-1:
-                length = self.torrent.final_piece_size - (self.torrent_fileblocks_per_final_piece-1)*BLOCK_SIZE
+                length = self.torrent.final_piece_size - (self.torrent.blocks_per_final_piece-1)*BLOCK_SIZE
 
             peer.request = True 
 

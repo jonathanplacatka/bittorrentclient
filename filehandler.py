@@ -8,6 +8,8 @@ class FileHandler:
     def __init__(self, torrent):
 
         self.torrent = torrent
+
+        self.bitfield = bitstring.BitArray(((torrent.num_pieces + 7) >> 3) << 3)
         self.blocks_requested = []
         self.blocks_received = []
         
@@ -37,6 +39,9 @@ class FileHandler:
 
     def validate_piece(self, piece_index):
         if self.blocks_received[piece_index].all(True):
+
+            self.bitfield[piece_index] = True
+
             hash_offset = piece_index*20
             piece_hash = self.torrent.data['info']['pieces'][hash_offset:hash_offset+20]
 
@@ -45,26 +50,36 @@ class FileHandler:
 
             if hashlib.sha1(piece).digest() == piece_hash:
                 print("PIECE {} VALID".format(piece_index))
+                print(self.bitfield.bin)
             else: #invalid piece, re-request all blocks
+
+                self.bitfield[piece_index] = False
+
                 print("INVALID PIECE")
                 num_blocks = self.torrent.blocks_per_piece 
                 
                 if piece_index == self.torrent.num_pieces-1:
                     num_blocks = self.torrent.blocks_per_final_piece
-
+                
                 self.blocks_requested[piece_index] = bitstring.BitArray(num_blocks)
                 self.blocks_received[piece_index] = bitstring.BitArray(num_blocks)
 
+    def check_interest(self, peer):
+        #resulting bitfield represents pieces we don't have, but peer does have
+        return not ((self.bitfield ^ peer.bitfield) & peer.bitfield).all(False)
+    
     def select_block(self, peer):
 
-        for piece_index in range(self.torrent.num_pieces): 
+        find_pieces = ((self.bitfield ^ peer.bitfield) & peer.bitfield).findall('0b1')
+        
+        for piece_index in find_pieces:
 
             find_block = self.blocks_requested[piece_index].find('0b0')
-        
-            #if we are missing a block and if peer has this piece
-            if len(find_block) > 0 and peer.bitfield[piece_index] == True:
+
+            if len(find_block) > 0:
                 block_index = find_block[0]
                 self.blocks_requested[piece_index][block_index] = True
                 return (piece_index, block_index)
-            
+
         return ()
+    
