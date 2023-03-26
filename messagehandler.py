@@ -1,10 +1,13 @@
 import bitstring
 
+BLOCK_SIZE = 16384
+
 class MessageHandler:
 
-    def __init__(self, torrent_file, peer_id):
+    def __init__(self, torrent_file, peer_id, file_handler):
         self.torrent_file = torrent_file
         self.peer_id = peer_id
+        self.file_handler = file_handler
 
     def receive(self, data, peer_socket, peer_list):
 
@@ -70,7 +73,14 @@ class MessageHandler:
         peer.bitfield = bitstring.BitArray(bytes)
 
     def receive_piece(self, peer, msg_len):
-        pass
+        print("RECIEVED - PIECE:{} BLOCK:{}".format(index, int(begin/BLOCK_SIZE)))
+
+        index = int.from_bytes(peer.buffer[5:9], byteorder='big')
+        begin = int.from_bytes(peer.buffer[9:13], byteorder='big')
+        block = peer.buffer[13:13+msg_len]
+
+        self.file_handler.write(index, begin, block)
+        peer.request = False
 
     def send_handshake(self, peer_socket):
         print("SENT HANDSHAKE")

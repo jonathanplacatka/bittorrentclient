@@ -1,5 +1,6 @@
 import torrent
 import messagehandler
+import filehandler
 
 import random
 
@@ -305,7 +306,6 @@ blocks_requested = []
 blocks_received = []
 
 
-
 for i in range(torrent_file.num_pieces):
     num_blocks = blocks_per_piece
     #last piece may have less blocks
@@ -315,8 +315,8 @@ for i in range(torrent_file.num_pieces):
     blocks_requested.append(bitstring.BitArray(num_blocks))
     blocks_received.append(bitstring.BitArray(num_blocks))
 
-
-msg_handler = messagehandler.MessageHandler(torrent_file, peer_id, blocks_received, fp_out)
+file_handler = filehandler.FileHandler(torrent_file)
+msg_handler = messagehandler.MessageHandler(torrent_file, peer_id, file_handler)
 
 peer_list = decode_compact_peer_list(tracker_response['peers'])
 
