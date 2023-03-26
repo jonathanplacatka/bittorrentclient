@@ -13,8 +13,6 @@ import requests
 from requests import adapters
 import urllib.parse
 
-import bitstring
-
 LISTEN_PORT = 7000
 BLOCK_SIZE = 16384
 
@@ -51,12 +49,20 @@ def tracker_request():
     return bdecode.decode(response.content)
 
 #TODO: check for compact vs non-compact peer list (compact almost always used in practice)
-def decode_compact_peer_list(peer_bytes):
+def read_compact_peer_list(peer_bytes):
     peer_list = []
     for x in range(0, len(peer_bytes), 6):
         ip = '.'.join(str(x) for x in peer_bytes[x:x+4]) #first 4 bytes are ip
         port = int.from_bytes(peer_bytes[x+4:x+6], byteorder='big') #last 2 bytes together are port
         peer_list.append(peer.Peer(ip, port, torrent)) 
+    return peer_list
+
+def read_peer_list(peers):
+    peer_list = []
+    for dict in peers:
+        ip = dict[b'ip'].decode()
+        port = dict[b'port']
+        peer_list.append(peer.Peer(ip, port, torrent))
     return peer_list
 
 def connect_peers():
@@ -69,6 +75,9 @@ def connect_peers():
             connecting.append(p_socket)
         elif errcode == 0: #connected
             connected.append(p_socket)
+        else:
+            print("CRINGE1!", errcode)
+            exit()
 
 def run():
     while True:
@@ -80,26 +89,54 @@ def run():
                 if data:
                    msg_handler.receive(data, sock, peer_list)
                 else:
-                    connected.remove(sock)
-
+                    print("peer closed connection")
+                    drop_connection(sock)
+                   
             for sock in writable:
                 if sock in connecting:
-                    if sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR) == 0:
+
+                    errno = sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR) 
+                    
+
+                    if errno == 0:
                         sock.setblocking(True)
                         connecting.remove(sock)
                         connected.append(sock)
                         print("{} connected: {}".format(len(connected), sock))
                         #connecting.clear() #TESTING, REMOVE ME
-                    
-                    #else:
-                        #connecting.remove(sock)
+                    else:
+                        connecting.remove(sock)
+                       
                 if sock in connected:
-                    msg_handler.send(sock, peer_list)
-        
+                    try:
+                        msg_handler.send(sock, peer_list)
+                    except Exception as e:
+                        print("failed to send: ", e)
+                        drop_connection(sock)
+
         except ValueError:
-            connected.remove(sock)    
+            connected.remove(sock)  
         except Exception as e:
             print('exception', e)
+
+
+def drop_connection(peer_socket):
+    print("CONNECTION DROPPED")
+
+    connected.remove(peer_socket)
+    peer = get_peer_from_socket(peer_socket, peer_list)
+
+    #re-request outstanding pieces
+    for indices in peer.requested:
+        piece = indices[0]
+        block = indices[1]
+        file_handler.blocks_requested[piece][block] = file_handler.blocks_received[piece][block]
+         
+   
+def get_peer_from_socket(socket, peer_list):
+    peer_ip = socket.getpeername()
+    index = peer_list.index(peer_ip)
+    return peer_list[index]
 
 #TODO: create main/startup methods
 
@@ -122,7 +159,10 @@ tracker_response = tracker_request()
 file_handler = filehandler.FileHandler(torrent)
 msg_handler = messagehandler.MessageHandler(torrent, peer_id, file_handler)
 
-peer_list = decode_compact_peer_list(tracker_response['peers'])
+if isinstance(tracker_response['peers'], list):
+    peer_list = read_peer_list(tracker_response['peers'])
+else:
+    peer_list = read_compact_peer_list(tracker_response['peers'])
 
 for p in peer_list:
     print(p.address, end=', ')
