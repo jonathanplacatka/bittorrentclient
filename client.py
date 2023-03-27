@@ -1,13 +1,13 @@
+import bdecode
 import torrent
 import messagehandler
 import filehandler
 import peer
 
 import random
-
-import bdecode
 import socket
 import select
+import errno
 
 import requests
 from requests import adapters
@@ -71,7 +71,7 @@ def connect_peers():
         p_socket.setblocking(False)
         errcode = p_socket.connect_ex(peer.address)
         
-        if errcode == 115: #connection in progress     
+        if errcode == errno.EINPROGRESS or errcode == errno.EWOULDBLOCK: #connection in progress        
             connecting.append(p_socket)
         elif errcode == 0: #connected
             connected.append(p_socket)
