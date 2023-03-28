@@ -1,7 +1,5 @@
 import bitstring
-
-BLOCK_SIZE = 16384
-BLOCKS_PER_REQUEST = 6
+import const
 
 class MessageHandler:
 
@@ -31,7 +29,7 @@ class MessageHandler:
                 elif msg_id == 7:
                     self.receive_piece(peer, msg_len)
                 else:
-                    print("Unimplemented Message: ", msg_len, msg_id)
+                    print("Unimplemented Message: ", msg_id)
 
                 peer.buffer = peer.buffer[4+msg_len:] #clear message from buffer
 
@@ -68,7 +66,7 @@ class MessageHandler:
         begin = int.from_bytes(peer.buffer[9:13], byteorder='big')
         block = peer.buffer[13:13+msg_len-9]
 
-        block_index = int(begin/BLOCK_SIZE)
+        block_index = int(begin/const.BLOCK_SIZE)
 
         #print("RECIEVED - PIECE:{} BLOCK:{}".format(index, block_index))
 
@@ -97,7 +95,7 @@ class MessageHandler:
     def send_request(self, peer, peer_socket):
         msg = b''
 
-        for i in range(0, BLOCKS_PER_REQUEST):
+        for i in range(0, const.BLOCKS_PER_REQUEST):
             request_params = self.file_handler.select_block(peer)
 
             #print("SENT REQUEST - PIECE:{} BLOCK:{}".format(request_params[0], request_params[1]))
@@ -106,8 +104,8 @@ class MessageHandler:
                 piece_index = request_params[0]
                 block_index = request_params[1]
 
-                length = BLOCK_SIZE
-                begin = block_index*BLOCK_SIZE
+                length = const.BLOCK_SIZE
+                begin = block_index*const.BLOCK_SIZE
 
                 #final block may have different size
                 if piece_index == self.torrent.num_pieces-1 and block_index == self.torrent.blocks_per_final_piece-1:

@@ -2,8 +2,7 @@ import bencodepy
 import hashlib
 import bdecode
 import math
-
-BLOCK_SIZE = 16384 #TODO: make common location for constants?
+import const
 
 #class representing a torrent file
 class Torrent:
@@ -36,10 +35,10 @@ class Torrent:
             self.length = self.data['info']['length']
 
         self.num_pieces = math.ceil(self.length / self.data['info']['piece length'])
-        self.blocks_per_piece = math.ceil(self.data['info']['piece length'] / BLOCK_SIZE)
+        self.blocks_per_piece = math.ceil(self.data['info']['piece length'] / const.BLOCK_SIZE)
 
         self.final_piece_size = self.length - (self.num_pieces-1)*self.data['info']['piece length']
-        self.blocks_per_final_piece = math.ceil(self.final_piece_size / BLOCK_SIZE)
+        self.blocks_per_final_piece = math.ceil(self.final_piece_size / const.BLOCK_SIZE)
 
 
     def get_multifile_length(self):

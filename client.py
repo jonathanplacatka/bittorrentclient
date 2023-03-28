@@ -3,6 +3,7 @@ import torrent
 import messagehandler
 import filehandler
 import peer
+import const
 
 import random
 import socket
@@ -12,9 +13,6 @@ import errno
 import requests
 from requests import adapters
 import urllib.parse
-
-LISTEN_PORT = 7000
-BLOCK_SIZE = 16384
 
 #20 bytes: 2 for client id, 4 for version number, remaining are random integers
 def generate_peer_id():
@@ -27,7 +25,7 @@ def tracker_request():
     request_params = {
         'info_hash': torrent.info_hash,
         'peer_id': peer_id,
-        'port': LISTEN_PORT,
+        'port': const.LISTEN_PORT,
         'uploaded': 0,
         'downloaded': 0,
         'left': torrent.length,
@@ -82,7 +80,7 @@ def run():
             readable, writable, exceptions = select.select(connected, connecting + connected, [])
 
             for sock in readable:
-                data = sock.recv(BLOCK_SIZE)
+                data = sock.recv(const.BLOCK_SIZE)
                 if data:
                    msg_handler.receive(data, get_peer_from_socket(sock))
                 else:
@@ -143,7 +141,7 @@ print("FILESIZE", torrent.length)
 print("MULTIFILE: ", torrent.is_multi)
 print("NUM PIECES: " + str(torrent.num_pieces))
 print("PIECE SIZE: " + str(torrent.data['info']['piece length']))
-print("BLOCK SIZE:",  str(BLOCK_SIZE))
+print("BLOCK SIZE:",  str(const.BLOCK_SIZE))
 
 tracker_response = tracker_request()
 

@@ -1,7 +1,6 @@
 import bitstring
 import hashlib
-
-BLOCK_SIZE = 16384
+import const
 
 class FileHandler:
 
@@ -33,7 +32,7 @@ class FileHandler:
         self.fp_out.seek(byte_offset, 0)
         self.fp_out.write(data)
 
-        self.blocks_received[piece_index][int(begin/BLOCK_SIZE)] = True
+        self.blocks_received[piece_index][int(begin/const.BLOCK_SIZE)] = True
 
         self.validate_piece(piece_index)
 
@@ -52,10 +51,10 @@ class FileHandler:
                 print("PIECE {} VALID".format(piece_index))
                 print(self.bitfield.bin)
             else: #invalid piece, re-request all blocks
-
+                print("INVALID PIECE")
+                
                 self.bitfield[piece_index] = False
 
-                print("INVALID PIECE")
                 num_blocks = self.torrent.blocks_per_piece 
                 
                 if piece_index == self.torrent.num_pieces-1:
