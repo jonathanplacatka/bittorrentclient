@@ -37,7 +37,7 @@ class FileHandler:
         self.validate_piece(piece_index)
 
     def validate_piece(self, piece_index):
-        if self.blocks_received[piece_index].all(True):
+        if self.blocks_received[piece_index].all(True) and self.bitfield[piece_index] == False:
 
             self.bitfield[piece_index] = True
 
@@ -88,5 +88,6 @@ class FileHandler:
             piece = indices[0]
             block = indices[1]
             self.blocks_requested[piece][block] = self.blocks_received[piece][block]
+
 
     

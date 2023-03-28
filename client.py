@@ -63,13 +63,17 @@ class Client:
         encoded_params = urllib.parse.urlencode(request_params, quote_via=urllib.parse.quote)
 
         url = self.torrent.data['announce']
-
         session = requests.Session()
 
         #trackers sometimes respond with ConnectionResetError on valid requests, just retry
-        retries = adapters.Retry(total=5, backoff_factor=0.5) 
-        session.mount('http://', adapter=adapters.HTTPAdapter(max_retries=retries))
-        response = session.get(url, params=encoded_params)
+        try:
+            retries = adapters.Retry(total=5, backoff_factor=0.5) 
+            session.mount('http://', adapter=adapters.HTTPAdapter(max_retries=retries))
+            response = session.get(url, params=encoded_params)
+        except Exception as e:
+            print(e)
+            print('Tracker Unavailable: Try again or use a different torrent file')
+            exit()
 
         return bdecode.decode(response.content)
 
