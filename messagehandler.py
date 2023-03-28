@@ -1,7 +1,5 @@
 import bitstring
-
-BLOCK_SIZE = 16384
-BLOCKS_PER_REQUEST = 6
+import const
 
 class MessageHandler:
 
@@ -31,14 +29,14 @@ class MessageHandler:
                 elif msg_id == 7:
                     self.receive_piece(peer, msg_len)
                 else:
-                    print("Unimplemented Message: ", msg_len, msg_id)
+                    self.log("RECEIVED UNIMPLEMENTED MSG: " + msg_id)
 
                 peer.buffer = peer.buffer[4+msg_len:] #clear message from buffer
 
     def receive_handshake(self, peer):
         if len(peer.buffer) >= 68:
             if peer.buffer[0:20] == b'\x13BitTorrent protocol' and peer.buffer[28:48] == self.torrent.info_hash:
-                #print("RECEIVED: HANDSHAKE")
+                self.log("RECEIVED: HANDSHAKE")
                 peer.received_handshake = True
             else: #invalid handshake, drop connection
                 raise ValueError("Invalid Handshake Message")
@@ -46,20 +44,21 @@ class MessageHandler:
         peer.buffer = peer.buffer[68:]
 
     def receive_unchoke(self, peer):
-        #print("RECEIVED: UNCHOKE")
+        self.log("RECEIVED: UNCHOKE")
         peer.peer_choking = False
 
     def receive_choke(self, peer):
-        #print("RECEIVED: CHOKE")
+        self.log("RECEIVED: CHOKE")
         peer.peer_choking = True
+        self.file_handler.reset_pieces(peer)
 
     def receive_have(self, peer):
         index = int.from_bytes(peer.buffer[5:9], byteorder='big')
-        print("RECIEVED HAVE: INDEX {}".format(index))
         peer.bitfield[index] = True
+        self.log("RECIEVED HAVE - INDEX:{}".format(index))
 
     def receive_bitfield(self, peer, msg_len):
-        print("RECEIVED: BITFIELD")
+        self.log("RECEIVED: BITFIELD")
         bytes = peer.buffer[5:5+msg_len-1]
         peer.bitfield = bitstring.BitArray(bytes)
 
@@ -68,19 +67,19 @@ class MessageHandler:
         begin = int.from_bytes(peer.buffer[9:13], byteorder='big')
         block = peer.buffer[13:13+msg_len-9]
 
-        block_index = int(begin/BLOCK_SIZE)
-
-        #print("RECIEVED - PIECE:{} BLOCK:{}".format(index, block_index))
+        block_index = int(begin/const.BLOCK_SIZE)
 
         self.file_handler.write(index, begin, block)
         peer.requested.remove((index, block_index))
 
+        self.log("RECIEVED - PIECE:{} BLOCK:{}".format(index, block_index))
+
         if self.file_handler.bitfield[0:self.torrent.num_pieces].all(True):
-            print("download complete!")
+            print("Download Complete.")
             exit()
 
     def send_handshake(self, peer, peer_socket):
-        #print("SENT HANDSHAKE")
+        self.log("SENT HANDSHAKE")
         HANDSHAKE = b'\x13BitTorrent protocol\x00\x00\x00\x00\x00\x00\x00\x00'
         msg = HANDSHAKE + self.torrent.info_hash + self.peer_id.encode()
         peer_socket.sendall(msg)
@@ -97,21 +96,19 @@ class MessageHandler:
     def send_request(self, peer, peer_socket):
         msg = b''
 
-        for i in range(0, BLOCKS_PER_REQUEST):
+        for i in range(0, const.BLOCKS_PER_REQUEST):
             request_params = self.file_handler.select_block(peer)
 
-            #print("SENT REQUEST - PIECE:{} BLOCK:{}".format(request_params[0], request_params[1]))
-            
             if len(request_params) > 0:
                 piece_index = request_params[0]
                 block_index = request_params[1]
 
-                length = BLOCK_SIZE
-                begin = block_index*BLOCK_SIZE
+                length = const.BLOCK_SIZE
+                begin = block_index*const.BLOCK_SIZE
 
                 #final block may have different size
                 if piece_index == self.torrent.num_pieces-1 and block_index == self.torrent.blocks_per_final_piece-1:
-                    length = self.torrent.final_piece_size - (self.torrent.blocks_per_final_piece-1)*BLOCK_SIZE
+                    length = self.torrent.final_piece_size - (self.torrent.blocks_per_final_piece-1)*const.BLOCK_SIZE
 
                 peer.requested.append((piece_index, block_index))
             
@@ -120,9 +117,18 @@ class MessageHandler:
                 msg += begin.to_bytes(4, byteorder='big') 
                 msg += length.to_bytes(4, byteorder='big')
 
+                self.log("SENT REQUEST - PIECE:{} BLOCK:{}".format(piece_index, block_index))
+
         peer_socket.sendall(msg)
 
     def send_interested(self, peer, peer_socket):
-        #print("SENDING INTERESTED")
+        self.log("SENDING INTERESTED")
         peer_socket.sendall(b'\x00\x00\x00\x01\x02')
         peer.am_interested = True
+
+    def log(self, msg):
+        if const.LOG_ALL_MESSAGES: 
+            print(msg)
+
+
+
