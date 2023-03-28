@@ -48,26 +48,6 @@ class Client:
         self.connect_peers(connecting, connected)
         self.process(connecting, connected)
 
-    #20 bytes: 2 for client id, 4 for version number, remaining are random integers
-    def generate_peer_id(self):
-        id = 'PY1000' 
-        for k in range(0, 14):
-            id += str(random.randint(0,9))
-        return id
-    
-    def print_torrent_info(self):
-        print('Filename: {}\nSize: {}\nMultifile: {}\n# of Pieces: {}\n'.format(self.torrent.data['info']['name'], self.torrent.length, self.torrent.is_multi, self.torrent.num_pieces))
-
-
-
-        # print("FILENAME: ", torrent.data['info']['name'])
-        # print("FILESIZE", torrent.length)
-        # print("MULTIFILE: ", torrent.is_multi)
-        # print("NUM PIECES: " + str(torrent.num_pieces))
-        # print("PIECE SIZE: " + str(torrent.data['info']['piece length']))
-        # print("BLOCK SIZE:",  str(const.BLOCK_SIZE))
-
-
     def tracker_request(self):
         request_params = {
             'info_hash': self.torrent.info_hash,
@@ -92,23 +72,6 @@ class Client:
         response = session.get(url, params=encoded_params)
 
         return bdecode.decode(response.content)
-
-    #TODO: check for compact vs non-compact peer list (compact almost always used in practice)
-    def read_compact_peer_list(self, peer_bytes):
-        peer_list = []
-        for x in range(0, len(peer_bytes), 6):
-            ip = '.'.join(str(x) for x in peer_bytes[x:x+4]) #first 4 bytes are ip
-            port = int.from_bytes(peer_bytes[x+4:x+6], byteorder='big') #last 2 bytes together are port
-            peer_list.append(peer.Peer(ip, port, self.torrent)) 
-        return peer_list
-
-    def read_peer_list(self, peers):
-        peer_list = []
-        for dict in peers:
-            ip = dict[b'ip'].decode()
-            port = dict[b'port']
-            peer_list.append(peer.Peer(ip, port, self.torrent))
-        return peer_list
 
     def connect_peers(self, connecting, connected):
         for peer in self.peer_list:   
@@ -157,8 +120,23 @@ class Client:
             except Exception as e:
                 print('exception:', e)
 
+    def read_compact_peer_list(self, peer_bytes):
+        peer_list = []
+        for x in range(0, len(peer_bytes), 6):
+            ip = '.'.join(str(x) for x in peer_bytes[x:x+4]) #first 4 bytes are ip
+            port = int.from_bytes(peer_bytes[x+4:x+6], byteorder='big') #last 2 bytes together are port
+            peer_list.append(peer.Peer(ip, port, self.torrent)) 
+        return peer_list
+
+    def read_peer_list(self, peers):
+        peer_list = []
+        for dict in peers:
+            ip = dict[b'ip'].decode()
+            port = dict[b'port']
+            peer_list.append(peer.Peer(ip, port, self.torrent))
+        return peer_list
+
     def drop_connection(self, peer_socket, connected):
-        print("CONNECTION DROPPED")
         connected.remove(peer_socket)
         peer = self.get_peer_from_socket(peer_socket)
         self.file_handler.reset_pieces(peer)
@@ -167,14 +145,16 @@ class Client:
         peer_ip = socket.getpeername()
         index = self.peer_list.index(peer_ip)
         return self.peer_list[index]
-
-#TODO: create main/startup methods
-# print("FILENAME: ", torrent.data['info']['name'])
-# print("FILESIZE", torrent.length)
-# print("MULTIFILE: ", torrent.is_multi)
-# print("NUM PIECES: " + str(torrent.num_pieces))
-# print("PIECE SIZE: " + str(torrent.data['info']['piece length']))
-# print("BLOCK SIZE:",  str(const.BLOCK_SIZE))
+    
+    #20 bytes: 2 for client id, 4 for version number, remaining are random integers
+    def generate_peer_id(self):
+        id = 'PY1000' 
+        for k in range(0, 14):
+            id += str(random.randint(0,9))
+        return id
+    
+    def print_torrent_info(self):
+        print('Filename: {}\nSize: {}\nMultifile: {}\n# of Pieces: {}\n'.format(self.torrent.data['info']['name'], self.torrent.length, self.torrent.is_multi, self.torrent.num_pieces))
 
 def main():
     if len(sys.argv) == 2:
