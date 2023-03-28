@@ -54,11 +54,11 @@ class MessageHandler:
 
     def receive_have(self, peer):
         index = int.from_bytes(peer.buffer[5:9], byteorder='big')
-        print("RECIEVED HAVE: INDEX {}".format(index))
+        #print("RECIEVED HAVE: INDEX {}".format(index))
         peer.bitfield[index] = True
 
     def receive_bitfield(self, peer, msg_len):
-        print("RECEIVED: BITFIELD")
+        #print("RECEIVED: BITFIELD")
         bytes = peer.buffer[5:5+msg_len-1]
         peer.bitfield = bitstring.BitArray(bytes)
 
@@ -75,7 +75,7 @@ class MessageHandler:
         peer.requested.remove((index, block_index))
 
         if self.file_handler.bitfield[0:self.torrent.num_pieces].all(True):
-            print("download complete!")
+            print("Download Complete.")
             exit()
 
     def send_handshake(self, peer, peer_socket):

@@ -30,16 +30,21 @@ class Client:
         connecting = []
         connected = []
 
+        self.print_torrent_info()
+
+        print("Sending Tracker Request...")
+
         tracker_response = self.tracker_request()
-        print(tracker_response)
+
+        print("Response Received!")
 
         if isinstance(tracker_response['peers'], list):
             self.peer_list = self.read_peer_list(tracker_response['peers'])
         else:
             self.peer_list = self.read_compact_peer_list(tracker_response['peers'])
 
-        print('PEERS: {}'.format(len(self.peer_list)))
-
+        print('# of Peers: {}\n'.format(len(self.peer_list)))
+    
         self.connect_peers(connecting, connected)
         self.process(connecting, connected)
 
@@ -49,6 +54,19 @@ class Client:
         for k in range(0, 14):
             id += str(random.randint(0,9))
         return id
+    
+    def print_torrent_info(self):
+        print('Filename: {}\nSize: {}\nMultifile: {}\n# of Pieces: {}\n'.format(self.torrent.data['info']['name'], self.torrent.length, self.torrent.is_multi, self.torrent.num_pieces))
+
+
+
+        # print("FILENAME: ", torrent.data['info']['name'])
+        # print("FILESIZE", torrent.length)
+        # print("MULTIFILE: ", torrent.is_multi)
+        # print("NUM PIECES: " + str(torrent.num_pieces))
+        # print("PIECE SIZE: " + str(torrent.data['info']['piece length']))
+        # print("BLOCK SIZE:",  str(const.BLOCK_SIZE))
+
 
     def tracker_request(self):
         request_params = {
@@ -69,7 +87,7 @@ class Client:
         session = requests.Session()
 
         #trackers sometimes respond with ConnectionResetError on valid requests, just retry
-        retries = adapters.Retry(total=5, backoff_factor=0.2) 
+        retries = adapters.Retry(total=5, backoff_factor=0.5) 
         session.mount('http://', adapter=adapters.HTTPAdapter(max_retries=retries))
         response = session.get(url, params=encoded_params)
 
@@ -113,7 +131,7 @@ class Client:
                     if data:
                         self.msg_handler.receive(data, self.get_peer_from_socket(sock))
                     else:
-                        print("peer closed connection")
+                        #peer closed connection
                         self.drop_connection(sock, connected)
                     
                 for sock in writable:
@@ -131,13 +149,13 @@ class Client:
                         try:
                             self.msg_handler.send(self.get_peer_from_socket(sock), sock)
                         except Exception as e:
-                            print("failed to send: ", e)
+                            #failed to send, drop connection
                             self.drop_connection(sock, connected)
 
             except ValueError:
                 connected.remove(sock)  
             except Exception as e:
-                print('exception', e)
+                print('exception:', e)
 
     def drop_connection(self, peer_socket, connected):
         print("CONNECTION DROPPED")
@@ -149,7 +167,6 @@ class Client:
         peer_ip = socket.getpeername()
         index = self.peer_list.index(peer_ip)
         return self.peer_list[index]
-    
 
 #TODO: create main/startup methods
 # print("FILENAME: ", torrent.data['info']['name'])
@@ -163,7 +180,6 @@ def main():
     if len(sys.argv) == 2:
         c = Client(sys.argv[1])
         c.run()
-
     else:
         print("Invalid Arguments! Use: python3 client [torrent]")
 
