@@ -115,13 +115,8 @@ def drop_connection(peer_socket):
 
     connected.remove(peer_socket)
     peer = get_peer_from_socket(peer_socket)
+    file_handler.reset_pieces(peer)
 
-    #re-request outstanding pieces
-    for indices in peer.requested:
-        piece = indices[0]
-        block = indices[1]
-        file_handler.blocks_requested[piece][block] = file_handler.blocks_received[piece][block]
-         
 def get_peer_from_socket(socket):
     peer_ip = socket.getpeername()
     index = peer_list.index(peer_ip)
@@ -133,7 +128,7 @@ peer_list = []
 connecting = []
 connected = []
 
-torrent = torrent.Torrent('dataset.torrent')
+torrent = torrent.Torrent('onepiece.torrent')
 peer_id = generate_peer_id()
 
 print("FILENAME: ", torrent.data['info']['name'])

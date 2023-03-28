@@ -50,6 +50,7 @@ class MessageHandler:
     def receive_choke(self, peer):
         #print("RECEIVED: CHOKE")
         peer.peer_choking = True
+        self.file_handler.reset_pieces(peer)
 
     def receive_have(self, peer):
         index = int.from_bytes(peer.buffer[5:9], byteorder='big')
@@ -109,7 +110,7 @@ class MessageHandler:
 
                 #final block may have different size
                 if piece_index == self.torrent.num_pieces-1 and block_index == self.torrent.blocks_per_final_piece-1:
-                    length = self.torrent.final_piece_size - (self.torrent.blocks_per_final_piece-1)*BLOCK_SIZE
+                    length = self.torrent.final_piece_size - (self.torrent.blocks_per_final_piece-1)*const.BLOCK_SIZE
 
                 peer.requested.append((piece_index, block_index))
             

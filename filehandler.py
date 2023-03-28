@@ -52,7 +52,7 @@ class FileHandler:
                 print(self.bitfield.bin)
             else: #invalid piece, re-request all blocks
                 print("INVALID PIECE")
-                
+
                 self.bitfield[piece_index] = False
 
                 num_blocks = self.torrent.blocks_per_piece 
@@ -81,4 +81,12 @@ class FileHandler:
                 return (piece_index, block_index)
 
         return ()
+    
+    def reset_pieces(self, peer):
+        #re-request outstanding pieces
+        for indices in peer.requested:
+            piece = indices[0]
+            block = indices[1]
+            self.blocks_requested[piece][block] = self.blocks_received[piece][block]
+
     
