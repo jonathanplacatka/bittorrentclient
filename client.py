@@ -143,7 +143,7 @@ class Client:
     def drop_connection(self, peer_socket, connected):
         connected.remove(peer_socket)
         peer = self.get_peer_from_socket(peer_socket)
-        self.file_handler.reset_pieces(peer)
+        self.msg_handler.reset_pieces(peer)
 
     def get_peer_from_socket(self, socket):
         peer_ip = socket.getpeername()

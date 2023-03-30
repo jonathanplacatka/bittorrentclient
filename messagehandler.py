@@ -1,5 +1,6 @@
 import bitstring
 import const
+from collections import deque
 
 class MessageHandler:
 
@@ -7,6 +8,20 @@ class MessageHandler:
         self.torrent = torrent
         self.peer_id = peer_id
         self.file_handler = file_handler
+        self.rqueue = self.init_queue()
+
+    def init_queue(self):
+        queue = deque()
+
+        for i in range(self.torrent.num_pieces):
+            num_blocks = self.torrent.blocks_per_piece
+            if i == self.torrent.num_pieces-1: 
+                num_blocks = self.torrent.blocks_per_final_piece
+            
+            for j in range(num_blocks):
+                queue.append((i, j))
+
+        return queue
 
     def receive(self, data, peer):
         peer.buffer += data
@@ -50,7 +65,7 @@ class MessageHandler:
     def receive_choke(self, peer):
         self.log("RECEIVED: CHOKE")
         peer.peer_choking = True
-        self.file_handler.reset_pieces(peer)
+        self.reset_pieces(peer)
 
     def receive_have(self, peer):
         index = int.from_bytes(peer.buffer[5:9], byteorder='big')
@@ -96,22 +111,23 @@ class MessageHandler:
     def send_request(self, peer, peer_socket):
         msg = b''
 
-        for i in range(0, const.BLOCKS_PER_REQUEST):
-            request_params = self.file_handler.select_block(peer)
+        for i in range(0, const.BLOCKS_PER_REQUEST): 
+            try:
+                indices = self.rqueue.popleft()
 
-            if len(request_params) > 0:
-                piece_index = request_params[0]
-                block_index = request_params[1]
+                piece_index = indices[0]
+                block_index = indices[1]
+
+                begin = block_index*const.BLOCK_SIZE
 
                 length = const.BLOCK_SIZE
-                begin = block_index*const.BLOCK_SIZE
 
                 #final block may have different size
                 if piece_index == self.torrent.num_pieces-1 and block_index == self.torrent.blocks_per_final_piece-1:
                     length = self.torrent.final_piece_size - (self.torrent.blocks_per_final_piece-1)*const.BLOCK_SIZE
 
-                peer.requested.append((piece_index, block_index))
-            
+                peer.requested.append(indices)
+
                 msg += b'\x00\x00\x00\x0d\x06'
                 msg += piece_index.to_bytes(4, byteorder='big') 
                 msg += begin.to_bytes(4, byteorder='big') 
@@ -119,12 +135,20 @@ class MessageHandler:
 
                 self.log("SENT REQUEST - PIECE:{} BLOCK:{}".format(piece_index, block_index))
 
-        peer_socket.sendall(msg)
+            except IndexError:
+                pass
+
+        if len(msg) > 0:
+            peer_socket.sendall(msg)
 
     def send_interested(self, peer, peer_socket):
         self.log("SENDING INTERESTED")
         peer_socket.sendall(b'\x00\x00\x00\x01\x02')
         peer.am_interested = True
+
+    def reset_pieces(self, peer):
+        #re-request outstanding pieces
+        self.rqueue.extendleft(peer.requested)
 
     def log(self, msg):
         if const.LOG_ALL_MESSAGES: 
