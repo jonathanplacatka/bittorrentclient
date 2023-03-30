@@ -67,27 +67,6 @@ class FileHandler:
         #resulting bitfield represents pieces we don't have, but peer does have
         return not ((self.bitfield ^ peer.bitfield) & peer.bitfield).all(False)
     
-    def select_block(self, peer):
-
-        find_pieces = ((self.bitfield ^ peer.bitfield) & peer.bitfield).findall('0b1')
-        
-        for piece_index in find_pieces:
-
-            find_block = self.blocks_requested[piece_index].find('0b0')
-
-            if len(find_block) > 0:
-                block_index = find_block[0]
-                self.blocks_requested[piece_index][block_index] = True
-                return (piece_index, block_index)
-
-        return ()
-    
-    def reset_pieces(self, peer):
-        #re-request outstanding pieces
-        for indices in peer.requested:
-            piece = indices[0]
-            block = indices[1]
-            self.blocks_requested[piece][block] = self.blocks_received[piece][block]
 
 
     
