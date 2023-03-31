@@ -9,12 +9,15 @@ class Torrent:
     def __init__(self, filename):
         self.data = {}
         self.length = 0
+        self.info_hash = None
+
         self.num_pieces = 0
         self.blocks_per_piece = 0
         self.blocks_per_final_piece = 0
         self.final_piece_size = 0
+
         self.is_multi = False
-        self.info_hash = None
+        self.file_offsets = []
 
         self.read_torrent(filename)
     
@@ -28,9 +31,15 @@ class Torrent:
             info_bencoded = bencodepy.encode(self.data['info'])
             self.info_hash = hashlib.sha1(info_bencoded).digest()
 
+            #calculate multifile length and offsets
             if('files' in self.data['info']):
                 self.is_multi = True
-                self.length = self.get_multifile_length()
+                total = 0
+                for file in self.data['info']['files']:
+                    self.file_offsets.append(total)
+                    total += file['length']
+
+                self.length = total
             else:
                 self.length = self.data['info']['length']
 
@@ -42,9 +51,3 @@ class Torrent:
         except Exception:
             print('Unsupported File: Use a different torrent file')
             exit()
-            
-    def get_multifile_length(self):
-        total = 0
-        for file in self.data['info']['files']:
-            total += file['length']
-        return total
