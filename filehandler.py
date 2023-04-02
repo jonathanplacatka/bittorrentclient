@@ -70,7 +70,7 @@ class FileHandler:
                 piece = self.fp_out.read(size)
 
             if hashlib.sha1(piece).digest() == piece_hash:
-                print("PIECE {} VALID".format(piece_index))
+                print("RECEIVED PIECE {}".format(piece_index))
                 print(self.bitfield.bin)
             else: #invalid piece, re-request all blocks
                 print("INVALID PIECE")

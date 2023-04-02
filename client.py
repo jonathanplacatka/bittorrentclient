@@ -21,7 +21,7 @@ class Client:
         self.torrent = torrent.Torrent(filename)
 
         self.peer_id = self.generate_peer_id()
-        self.peer_list = []
+        self.peer_dict = {}
         
         self.file_handler = filehandler.FileHandler(self.torrent)
         self.msg_handler = messagehandler.MessageHandler(self.torrent, self.peer_id, self.file_handler) 
@@ -39,11 +39,11 @@ class Client:
         print("Response Received!")
 
         if isinstance(tracker_response['peers'], list):
-            self.peer_list = self.read_peer_list(tracker_response['peers'])
+            self.peer_dict = self.read_peer_list(tracker_response['peers'])
         else:
-            self.peer_list = self.read_compact_peer_list(tracker_response['peers'])
+            self.peer_dict = self.read_compact_peer_list(tracker_response['peers'])
 
-        print('# of Peers: {}\n'.format(len(self.peer_list)))
+        print('# of Peers: {}\n'.format(len(self.peer_dict)))
     
         self.connect_peers(connecting, connected)
         self.process(connecting, connected)
@@ -77,15 +77,17 @@ class Client:
         return bdecode.decode(response.content)
 
     def connect_peers(self, connecting, connected):
-        for peer in self.peer_list:   
-            p_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            p_socket.setblocking(False)
-            errcode = p_socket.connect_ex(peer.address)
+        for peer_socket in self.peer_dict:   
+
+            peer_socket.setblocking(False)
+            peer = self.peer_dict[peer_socket]
+
+            errcode = peer_socket.connect_ex(peer.address)
             
             if errcode == errno.EINPROGRESS or errcode == errno.EWOULDBLOCK: #connection in progress        
-                connecting.append(p_socket)
+                connecting.append(peer_socket)
             elif errcode == 0: #connected
-                connected.append(p_socket)
+                connected.append(peer_socket)
 
     def process(self, connecting, connected):
         while True:
@@ -95,7 +97,7 @@ class Client:
                 for sock in readable:
                     data = sock.recv(const.BLOCK_SIZE)
                     if data:
-                        self.msg_handler.receive(data, self.get_peer_from_socket(sock))
+                        self.msg_handler.receive(data, self.peer_dict[sock])
                     else:
                         #peer closed connection
                         self.drop_connection(sock, connected)
@@ -111,7 +113,7 @@ class Client:
                         
                     if sock in connected:
                         try:
-                            self.msg_handler.send(self.get_peer_from_socket(sock), sock)
+                            self.msg_handler.send(self.peer_dict[sock], sock)
                         except Exception as e:
                             #failed to send, drop connection
                             self.drop_connection(sock, connected)
@@ -123,33 +125,29 @@ class Client:
 
     #read peer list in compact byte format
     def read_compact_peer_list(self, peer_bytes):
-        peer_list = []
+        peer_dict = {}
         for x in range(0, len(peer_bytes), 6):
             ip = '.'.join(str(x) for x in peer_bytes[x:x+4]) #first 4 bytes are ip
             port = int.from_bytes(peer_bytes[x+4:x+6], byteorder='big') #last 2 bytes together are port
-            peer_list.append(peer.Peer(ip, port, self.torrent)) 
-        return peer_list
+            peer_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            peer_dict[peer_socket] = peer.Peer(ip, port, self.torrent)
+        return peer_dict
 
     #read peer list in dictionary format
     def read_peer_list(self, peers):
-        peer_list = []
+        peer_dict = {}
         for dict in peers:
             ip = dict[b'ip'].decode()
             port = dict[b'port']
-            peer_list.append(peer.Peer(ip, port, self.torrent))
-        return peer_list
+            peer_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            peer_dict[peer_socket] = peer.Peer(ip, port, self.torrent)
+        return peer_dict
 
     def drop_connection(self, peer_socket, connected):
         connected.remove(peer_socket)
-        peer = self.get_peer_from_socket(peer_socket)
+        peer = self.peer_dict[peer_socket]
         self.msg_handler.reset_pieces(peer)
 
-    #given a socket, get the corresponding Peer object
-    def get_peer_from_socket(self, socket):
-        peer_ip = socket.getpeername()
-        index = self.peer_list.index(peer_ip)
-        return self.peer_list[index]
-    
     #20 bytes: 2 for client id, 4 for version number, remaining are random integers
     def generate_peer_id(self):
         id = 'PY1000' 
