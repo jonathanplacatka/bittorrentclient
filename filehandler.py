@@ -1,6 +1,9 @@
+import const
+
 import bitstring
 import hashlib
-import const
+import bisect
+import os
 
 class FileHandler:
 
@@ -8,13 +11,22 @@ class FileHandler:
 
         self.torrent = torrent
 
-        self.bitfield = bitstring.BitArray(((torrent.num_pieces + 7) >> 3) << 3)
         self.blocks_requested = []
         self.blocks_received = []
         
-        open(torrent.data['info']['name'], 'a+').close() #create file if it doesn't exist
-        self.fp_out = open(torrent.data['info']['name'], 'r+b') #open file for reading and writing
-    
+        #round up to next multiple of 8
+        self.bitfield = bitstring.BitArray(((torrent.num_pieces + 7) >> 3) << 3)
+
+        self.fp_list = []
+
+        if torrent.is_multi:
+            for file in torrent.data['info']['files']:
+                path = '{}/{}'.format(torrent.data['info']['name'], '/'.join(file['path']))
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                self.fp_list.append(open(path, 'wb+'))
+        else:
+            self.fp_out = open(torrent.data['info']['name'], 'wb+')
+        
         #initialize block bitstrings
         for i in range(torrent.num_pieces):
             num_blocks = torrent.blocks_per_piece
@@ -26,14 +38,15 @@ class FileHandler:
             self.blocks_received.append(bitstring.BitArray(num_blocks))
 
     def write(self, piece_index, begin, data):
-
         byte_offset = piece_index*self.torrent.data['info']['piece length'] + begin
 
-        self.fp_out.seek(byte_offset, 0)
-        self.fp_out.write(data)
+        if self.torrent.is_multi:
+            self.write_multi(byte_offset, data)
+        else:
+            self.fp_out.seek(byte_offset, 0)
+            self.fp_out.write(data)
 
         self.blocks_received[piece_index][int(begin/const.BLOCK_SIZE)] = True
-
         self.validate_piece(piece_index)
 
     def validate_piece(self, piece_index):
@@ -44,8 +57,17 @@ class FileHandler:
             hash_offset = piece_index*20
             piece_hash = self.torrent.data['info']['pieces'][hash_offset:hash_offset+20]
 
-            self.fp_out.seek(piece_index*self.torrent.data['info']['piece length'], 0)
-            piece = self.fp_out.read(self.torrent.data['info']['piece length'])
+            size = self.torrent.data['info']['piece length']
+            if piece_index == self.torrent.num_pieces-1:
+                size = self.torrent.final_piece_size
+
+            byte_offset = piece_index*self.torrent.data['info']['piece length']
+
+            if self.torrent.is_multi:
+                piece = self.read_multi(byte_offset, size)
+            else:
+                self.fp_out.seek(byte_offset, 0)
+                piece = self.fp_out.read(size)
 
             if hashlib.sha1(piece).digest() == piece_hash:
                 print("PIECE {} VALID".format(piece_index))
@@ -67,6 +89,45 @@ class FileHandler:
         #resulting bitfield represents pieces we don't have, but peer does have
         return not ((self.bitfield ^ peer.bitfield) & peer.bitfield).all(False)
     
+    def write_multi(self, byte_offset, data):
+        
+        files = self.torrent.data['info']['files']
+        file_index = bisect.bisect(self.torrent.file_offsets, byte_offset)-1
+        bytes_written = 0
+
+        while bytes_written < len(data):
+            #amount left to write in this file
+            file_bytes = self.torrent.file_offsets[file_index] + files[file_index]['length'] - byte_offset
+
+            amount = min(file_bytes, len(data)-bytes_written)
+
+            self.fp_list[file_index].seek(byte_offset-self.torrent.file_offsets[file_index], 0)
+            self.fp_list[file_index].write(data[bytes_written:bytes_written+amount])
+
+            byte_offset += amount
+            bytes_written += amount
+            file_index += 1
+
+    def read_multi(self, byte_offset, size):
+
+        files = self.torrent.data['info']['files']      
+        file_index = bisect.bisect(self.torrent.file_offsets, byte_offset)-1
+        bytes_read = 0
+        data = b''
+        
+        while bytes_read < size:
+
+            file_bytes = self.torrent.file_offsets[file_index] + files[file_index]['length'] - byte_offset
+            amount = min(file_bytes, size-bytes_read)
+
+            self.fp_list[file_index].seek(byte_offset-self.torrent.file_offsets[file_index], 0)
+            data += self.fp_list[file_index].read(amount)
+            
+            byte_offset += amount
+            bytes_read += amount
+            file_index += 1
+
+        return data
 
 
     
