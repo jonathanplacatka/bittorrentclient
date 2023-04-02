@@ -71,8 +71,7 @@ class Client:
             session.mount('http://', adapter=adapters.HTTPAdapter(max_retries=retries))
             response = session.get(url, params=encoded_params)
         except Exception as e:
-            print(e)
-            print('Tracker Unavailable: Try again or use a different torrent file')
+            print(e, '\nTracker Unavailable: Try again or use a different torrent file')
             exit()
 
         return bdecode.decode(response.content)
@@ -104,11 +103,9 @@ class Client:
                 for sock in writable:
                     if sock in connecting:
                         if sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR) == 0:
-                            sock.setblocking(True)
                             connecting.remove(sock)
                             connected.append(sock)
-                            print("{} connected: {}".format(len(connected), sock.getpeername()))
-                            #connecting.clear() #TESTING, REMOVE ME
+                            print("peer connected: {}".format(sock.getpeername()))
                         else:
                             connecting.remove(sock)
                         
@@ -124,6 +121,7 @@ class Client:
             except Exception as e:
                 print('exception:', e)
 
+    #read peer list in compact byte format
     def read_compact_peer_list(self, peer_bytes):
         peer_list = []
         for x in range(0, len(peer_bytes), 6):
@@ -132,6 +130,7 @@ class Client:
             peer_list.append(peer.Peer(ip, port, self.torrent)) 
         return peer_list
 
+    #read peer list in dictionary format
     def read_peer_list(self, peers):
         peer_list = []
         for dict in peers:
@@ -145,6 +144,7 @@ class Client:
         peer = self.get_peer_from_socket(peer_socket)
         self.msg_handler.reset_pieces(peer)
 
+    #given a socket, get the corresponding Peer object
     def get_peer_from_socket(self, socket):
         peer_ip = socket.getpeername()
         index = self.peer_list.index(peer_ip)
