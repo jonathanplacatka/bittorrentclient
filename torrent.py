@@ -1,10 +1,10 @@
+import const
+
 import bencodepy
 import hashlib
 import bdecode
 import math
-import const
 
-#class representing a torrent file
 class Torrent:
     def __init__(self, filename):
         self.data = {}
@@ -43,11 +43,12 @@ class Torrent:
             else:
                 self.length = self.data['info']['length']
 
+            #calculate piece info
             self.num_pieces = math.ceil(self.length / self.data['info']['piece length'])
             self.blocks_per_piece = math.ceil(self.data['info']['piece length'] / const.BLOCK_SIZE)
 
             self.final_piece_size = self.length - (self.num_pieces-1)*self.data['info']['piece length']
             self.blocks_per_final_piece = math.ceil(self.final_piece_size / const.BLOCK_SIZE)
-        except Exception:
-            print('Unsupported File: Use a different torrent file')
+        except Exception as e:
+            print(e, '\nUnsupported File: Use a different torrent file')
             exit()

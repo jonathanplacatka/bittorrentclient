@@ -1,5 +1,6 @@
-import bitstring
 import const
+
+import bitstring
 from collections import deque
 
 class MessageHandler:
@@ -53,8 +54,6 @@ class MessageHandler:
             if peer.buffer[0:20] == b'\x13BitTorrent protocol' and peer.buffer[28:48] == self.torrent.info_hash:
                 self.log("RECEIVED: HANDSHAKE")
                 peer.received_handshake = True
-            else: #invalid handshake, drop connection
-                raise ValueError("Invalid Handshake Message")
             
         peer.buffer = peer.buffer[68:]
 
@@ -93,13 +92,6 @@ class MessageHandler:
             print("Download Complete.")
             exit()
 
-    def send_handshake(self, peer, peer_socket):
-        self.log("SENT HANDSHAKE")
-        HANDSHAKE = b'\x13BitTorrent protocol\x00\x00\x00\x00\x00\x00\x00\x00'
-        msg = HANDSHAKE + self.torrent.info_hash + self.peer_id.encode()
-        peer_socket.sendall(msg)
-        peer.sent_handshake = True
-
     def send(self, peer, peer_socket):
         if peer.sent_handshake == False:
             self.send_handshake(peer, peer_socket)
@@ -107,6 +99,13 @@ class MessageHandler:
             self.send_interested(peer, peer_socket)
         elif peer.am_interested and not peer.peer_choking and len(peer.requested) == 0:
             self.send_request(peer, peer_socket)
+
+    def send_handshake(self, peer, peer_socket):
+        self.log("SENT HANDSHAKE")
+        HANDSHAKE = b'\x13BitTorrent protocol\x00\x00\x00\x00\x00\x00\x00\x00'
+        msg = HANDSHAKE + self.torrent.info_hash + self.peer_id.encode()
+        peer_socket.sendall(msg)
+        peer.sent_handshake = True
 
     def send_request(self, peer, peer_socket):
         msg = b''
