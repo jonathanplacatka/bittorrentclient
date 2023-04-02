@@ -78,7 +78,6 @@ class Client:
 
     def connect_peers(self, connecting, connected):
         for peer_socket in self.peer_dict:   
-
             peer_socket.setblocking(False)
             peer = self.peer_dict[peer_socket]
 
@@ -96,13 +95,17 @@ class Client:
 
                 for sock in readable:
                     if sock in connected:
-                        data = sock.recv(const.BLOCK_SIZE)
-                        if data:
-                            self.msg_handler.receive(data, self.peer_dict[sock])
-                        else:
-                            #peer closed connection
+                        try:
+                            data = sock.recv(const.BLOCK_SIZE)
+                            if data:
+                                self.msg_handler.receive(data, self.peer_dict[sock])
+                            else:
+                                self.drop_connection(sock, connected)
+                                    
+                        except Exception:
                             self.drop_connection(sock, connected)
-                    
+
+
                 for sock in writable:
                     if sock in connecting:
                         if sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR) == 0:
@@ -116,7 +119,7 @@ class Client:
                     if sock in connected:
                         try:
                             self.msg_handler.send(self.peer_dict[sock], sock)
-                        except Exception as e:
+                        except Exception:
                             #failed to send, drop connection
                             self.drop_connection(sock, connected)
 
