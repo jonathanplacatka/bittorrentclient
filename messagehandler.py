@@ -1,5 +1,6 @@
-import bitstring
 import const
+
+import bitstring
 from collections import deque
 
 class MessageHandler:

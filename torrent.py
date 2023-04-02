@@ -1,10 +1,10 @@
+import const
+
 import bencodepy
 import hashlib
 import bdecode
 import math
-import const
 
-#class representing a torrent file
 class Torrent:
     def __init__(self, filename):
         self.data = {}
