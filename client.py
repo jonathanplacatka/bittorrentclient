@@ -95,12 +95,13 @@ class Client:
                 readable, writable, exceptions = select.select(connected, connecting + connected, [])
 
                 for sock in readable:
-                    data = sock.recv(const.BLOCK_SIZE)
-                    if data:
-                        self.msg_handler.receive(data, self.peer_dict[sock])
-                    else:
-                        #peer closed connection
-                        self.drop_connection(sock, connected)
+                    if sock in connected:
+                        data = sock.recv(const.BLOCK_SIZE)
+                        if data:
+                            self.msg_handler.receive(data, self.peer_dict[sock])
+                        else:
+                            #peer closed connection
+                            self.drop_connection(sock, connected)
                     
                 for sock in writable:
                     if sock in connecting:
@@ -110,6 +111,7 @@ class Client:
                             print("peer connected: {}".format(sock.getpeername()))
                         else:
                             connecting.remove(sock)
+                            sock.close()
                         
                     if sock in connected:
                         try:
@@ -118,10 +120,8 @@ class Client:
                             #failed to send, drop connection
                             self.drop_connection(sock, connected)
 
-            except ValueError:
-                connected.remove(sock)  
             except Exception as e:
-                print('exception:', e)
+                print(e)
 
     #read peer list in compact byte format
     def read_compact_peer_list(self, peer_bytes):
@@ -147,6 +147,7 @@ class Client:
         connected.remove(peer_socket)
         peer = self.peer_dict[peer_socket]
         self.msg_handler.reset_pieces(peer)
+        peer_socket.close()
 
     #20 bytes: 2 for client id, 4 for version number, remaining are random integers
     def generate_peer_id(self):
